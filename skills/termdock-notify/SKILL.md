@@ -52,5 +52,5 @@ A non-zero exit code means **the message did not reach them**. Do not retry in a
 loop: none of the reasons are transient. Stop sending, carry on with the work,
 and leave what you wanted to say in the terminal.
 
-Reasons, the HTTP surface for callers outside a Termdock terminal, and the rate
-limit are in `references/delivery.md`.
+Reasons and exit codes: `references/cli.md`. The HTTP surface for callers that
+cannot run the CLI: `references/api.md`.
