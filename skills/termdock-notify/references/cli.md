@@ -34,8 +34,9 @@ None of these are transient. Do not retry in a loop.
 | `No push notification provider is connected.` | Nothing configured, or the provider failed to start | Nothing you can fix from here |
 | `Remote control is disabled in Settings.` | The whole feature is off | Same |
 | `Remote control is not running` | The service is not up | Same |
+| `Every configured provider rejected the message.` | It reached Discord/Telegram and they refused | Check the provider is still connected |
 
-Rejected messages are not counted against the rate limit, so a caller that stops when told is not punished for having tried.
+Sends rejected before anything is attempted (rate limit, pushes off, no provider) do not count against the rate limit. A send that reached a provider and was refused does count: the slot was spent.
 
 ## Outside a Termdock terminal
 
@@ -45,4 +46,4 @@ A daemon, cron job, or hook has no `$TERMDOCK_SESSION_ID` and must say what it i
 termdock notify "nightly build failed" --session <sessionId>
 ```
 
-Without a session the message still goes out, labelled with the workspace name instead of a terminal tab.
+Without a session the message still goes out, labelled `Termdock`.

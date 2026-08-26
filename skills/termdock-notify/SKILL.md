@@ -40,11 +40,15 @@ Send when one of these is true:
 - **Retrying after a failure.** A rejected send is never a transient error.
 - **Splitting one thought into several messages.** Send once, completely.
 
-## They Can Answer
+## Do Not Count On A Reply
 
-The user can reply from their phone and it arrives in this terminal as if they
-had typed it. A message ending in a question is a real question, and the answer
-shows up as input. Ask, then keep waiting the way you normally would.
+A reply only reaches a terminal when the user has run `/attach` on it from their
+remote, and only one session can be attached at a time. If they are attached
+elsewhere, or not attached at all, their answer goes to another terminal or
+nowhere.
+
+So a question you push is a question you may never hear back on. Leave it in your
+terminal too, and carry on as if the push had not happened.
 
 ## When The Send Fails
 
