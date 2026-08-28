@@ -1,7 +1,8 @@
 ---
 name: termdock-terminal
+displayName: Termdock Terminal
 description: Drive Termdock terminals from inside one. Open a session for a long job instead of blocking your own, read what another session is doing, send input to it, arrange panes, and schedule a wake-up. Use when work would otherwise block your terminal, when you need output from a session that is not yours, or when the user asks you to run something "in another tab".
-version: 1
+version: 3
 minAppVersion: 1.20.0
 ---
 

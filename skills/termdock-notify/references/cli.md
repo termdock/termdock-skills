@@ -1,14 +1,15 @@
 # CLI
 
 ```
-termdock notify <message> [--session <id>] [--json]
+termdock notify <message> [--session <id>] [--title <text>] [--json]
 ```
 
 ## Options
 
 | Option | Effect |
 |---|---|
-| `--session <id>` | Which terminal the message is labelled with. Defaults to `$TERMDOCK_SESSION_ID`, which Termdock sets in every terminal it opens |
+| `--session <id>` | Which terminal the message belongs to. Defaults to `$TERMDOCK_SESSION_ID`, which Termdock sets in every terminal it opens. It selects the session's thread on Discord, and with a session set the push goes to Discord only when Discord is connected: that is the platform where the user can answer inside the thread. Without a session the message goes to every connected remote |
+| `--title <text>` | Names the Discord thread (1–100 characters). Only takes effect on the push that creates the thread — the session's first push — and is ignored afterwards. Without it the thread is named after the tab. Telegram ignores it |
 | `--json` | Print the response body instead of one line. Optional, unlike other `termdock` subcommands |
 
 No token or URL is needed on the machine running Termdock: the CLI mints a local service token against loopback by itself.
@@ -20,7 +21,7 @@ No token or URL is needed on the machine running Termdock: the CLI mints a local
 | Code | Meaning |
 |---|---|
 | `0` | Delivered |
-| `64` | Bad usage (no message, `--session` with no value) |
+| `64` | Bad usage (no message, `--session` or `--title` with no value) |
 | non-zero, other | Not delivered. The reason is on stderr |
 
 ## Why a send was rejected

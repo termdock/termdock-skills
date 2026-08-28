@@ -14,14 +14,15 @@ curl -s -X POST -H "Authorization: Bearer $TERMINAL_API_TOKEN" \
 | Field | Required | Notes |
 |---|---|---|
 | `message` | yes | 1 to 4000 characters after trimming |
-| `sessionId` | no | Only decides the label. Omit it and the message is labelled with the workspace |
+| `sessionId` | no | Selects the session's thread on Discord. It also decides where the push goes: with a session and Discord connected, the message goes to Discord only, because that is the platform that can put it in a thread the user can answer. Omit it and the message goes to every connected remote, labelled with the workspace |
+| `title` | no | Names the Discord thread, 1 to 100 characters after trimming. Only takes effect on the push that creates the thread; Telegram ignores it |
 
 ## Status codes
 
 | Code | Body `error.code` | Meaning |
 |---|---|---|
 | `200` | | Delivered |
-| `400` | `INVALID_NOTIFY_MESSAGE` | Empty message, or longer than 4000 characters |
+| `400` | `INVALID_NOTIFY_MESSAGE` | Empty message, message longer than 4000 characters, or `title` outside 1–100 characters |
 | `401` | | Missing or invalid bearer token |
 | `502` | `NOTIFY_NOT_DELIVERED` | Reached the service, went nowhere. The reason is in `error.message` |
 | `503` | `REMOTE_CONTROL_UNAVAILABLE` | Remote control is not running |

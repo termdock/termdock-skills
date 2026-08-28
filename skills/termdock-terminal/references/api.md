@@ -60,6 +60,10 @@ Separate from terminal sessions: these are SDK-driven agent conversations, not P
 | `DELETE` | `/api/agent-sessions/:id` | Kill |
 | `POST` | `/api/agent-sessions/hooks` | Where an agent CLI's hook posts permission prompts and questions |
 
+`session.sessionId` is Termdock's identity for one run, not the CLI's conversation id. Two terminals can be reading the same conversation file, and each run still needs its own identity. The conversation file's id is reported separately as `session.metadata.aiSessionId`.
+
+`resolve` returns that conversation id in its `sessionId` field, and `attach` accepts either form. Every other path above addresses a single run, so pass the `sessionId` that create or attach returned. Resolving and then calling `GET /:id` with the resolved id gives you a 404.
+
 ## Remote push
 
 | Method | Path | Purpose |
@@ -70,9 +74,12 @@ Separate from terminal sessions: these are SDK-driven agent conversations, not P
 
 | Method | Path | Purpose |
 |---|---|---|
+| `POST` | `/api/auth/bootstrap-challenge` | Prove the peer is Termdock before sending it the bootstrap secret |
 | `POST` | `/api/auth/service-tokens` | Mint a token for a daemon, using the bootstrap secret |
 | `POST` | `/api/auth/service-tokens/:id/rotate` | Rotate |
 | `DELETE` | `/api/auth/service-tokens/:id` | Revoke |
+
+A loopback port is first-come-first-served, so anything minting a token by hand should send `{"nonce":"<32+ hex chars>"}` to the challenge endpoint first and check that `data.proof` equals `HMAC-SHA256(bootstrapSecret, "<nonce>|<port>")` in hex, using the port it dialed. Any other outcome means do not send the secret. The `termdock` CLI already does this for you.
 
 ## Envelope
 
