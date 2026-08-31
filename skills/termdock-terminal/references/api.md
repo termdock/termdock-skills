@@ -26,33 +26,35 @@ curl -s -H "Authorization: Bearer $TERMINAL_API_TOKEN" \
 | `POST` | `/api/terminal/sessions/:id/keys` | Send a named key (`up`, `enter`, `ctrl+c`, ...) |
 | `POST` | `/api/terminal/sessions/:id/interrupt` | Ctrl+C |
 | `DELETE` | `/api/terminal/sessions/:id` | Destroy |
+| `GET` | `/api/terminal/sessions/:id/keepalive` | Scheduled injections (keep-alive) for that session |
+| `PUT` | `/api/terminal/sessions/:id/keepalive` | Create or replace one rule, addressed by `rule.id` |
+| `DELETE` | `/api/terminal/sessions/:id/keepalive/:ruleId` | Remove one rule |
 
-`:id` accepts a session id or a tab name. So do the layout endpoints below:
-`sessionIds`, the `assign` body's `sessionId`, and the `contentId` of each
-`terminal` pane in a restore snapshot.
+`:id` accepts a session id or a tab name.
 
-Name resolution: an id wins over a name; a name matching several sessions is not
-guessed at, it comes back as `SESSION_NOT_FOUND` with the closest candidate names.
-`SESSION_RESOLVE_FAILED` is a different failure, the resolution step itself broke
-and nothing was touched. Resolution happens once per request, and `/events` locks
-the id at subscribe time, so a tab renamed mid-flight can take a write meant for
-whoever holds the name now. Resolve once and address the id when that matters.
-`assign` echoes the resolved id back as `terminalId`. `restore` lists a snapshot
-target in `restored.unresolvedTargets` only when it is neither a live session id,
-nor a unique tab name, nor shaped like a session id (`zsh-`, `terminal-pty-`,
-`peer-term-`, `ssh-term-`). That combination means it was never an address. An id
-whose session already ended is the renderer's `skipped: CONTENT_NOT_FOUND` instead.
+A keep-alive rule is `{"rule":{"id","enabled","schedule","message"}}`, where
+`schedule` is `{"kind":"interval","intervalMs":n}`,
+`{"kind":"idle","thresholdMs":n}` or `{"kind":"daily","time":"HH:mm"}`. All
+three respond with the rule list after the change. The message is injected with
+Enter, so it is submitted. `503 KEEPALIVE_UNAVAILABLE` means the tool layer is
+not running, which is not the same as "no rules".
 
 ## Layout
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/api/terminal/layout` | Current layout, panes and pane ids |
+| `GET` | `/api/terminal/layout` | Current layout, panes and pane ids. `?full=true` adds the content bindings and geometry |
 | `POST` | `/api/terminal/layout` | Set the layout type, optionally placing sessions |
 | `POST` | `/api/terminal/layout/panes/:paneId/assign` | Put a session in a pane |
 | `POST` | `/api/terminal/layout/panes/:paneId/activate` | Focus a pane |
 | `POST` | `/api/terminal/layout/panels/:panelId/activate` | Focus a tab |
-| `POST` | `/api/terminal/layout/restore` | Restore a layout snapshot |
+| `POST` | `/api/terminal/layout/restore` | Restore a layout snapshot, in the shape `?full=true` returns |
+
+Capture the snapshot you intend to restore with `?full=true`. Restore binds panes
+by `contentType` / `contentId`, which the default slim shape does not carry, so
+posting a slim snapshot applies the layout, leaves every terminal unbound, and
+still answers `success: true` with an empty `restored.skipped`. Check the shape
+before posting; the `termdock layout restore` subcommand refuses slim files.
 
 ## Agent sessions
 

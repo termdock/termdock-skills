@@ -13,6 +13,12 @@ termdock hostinfo --json    # host terminal + Terminal API and AST API ports, wo
 
 Ports are not fixed. Read them from `hostinfo`, never hardcode.
 
+## Workspaces
+
+```bash
+termdock workspace list --json    # workspace ids, which is what session create takes
+```
+
 ## Sessions
 
 ```bash
@@ -21,6 +27,12 @@ termdock session list [--workspace <id>] --json
 termdock session output <id> [--mode raw|text|content|screen] [--lines <n>] [--since <cursor>] --json
 termdock session output <id> [--mode raw|text|content] [--lines <n>] [--since <cursor>] --follow [--json]
 termdock session input <id> <text> [--enter] --json
+termdock session submit <id> <text> [--settle-ms <n>] [--queue-until-ready] [--ready-timeout <ms>] --json
+termdock session key <id> <key> --json
+termdock session interrupt <id> --json
+termdock session status <id> --json
+termdock session log <id> --json
+termdock session ports <id> --json
 termdock session attach <id>
 termdock session destroy <id> --json
 ```
@@ -40,13 +52,63 @@ termdock session destroy <id> --json
 
 `session attach` takes over the terminal you run it in. Leave it to a human.
 
+`session input` types; `session submit` types and waits for the echo to settle
+before sending the submit key, which is what interactive TUI prompts need.
+`session key` sends one named key (`up`, `enter`, `ctrl+c`, ...) and
+`session interrupt` is Ctrl+C without destroying the session.
+
+`session status` answers "is it still working" without reading output;
+`session ports` reports what the processes in that session are listening on,
+which beats grepping the scrollback for a dev server URL.
+
+## Scheduling a wake-up (keep-alive)
+
+```bash
+termdock session keepalive list <id> --json
+termdock session keepalive set <id> --rule-id <id> --message <text> \
+  (--interval 30m | --idle 15m | --daily 09:00) [--disabled] --json
+termdock session keepalive rm <id> <rule-id> --json
+```
+
+A rule injects the message into that session on a schedule, with Enter, so it is
+submitted. Durations need a unit (`90s`, `30m`, `2h`); a bare number is rejected.
+
+| Flag | Notes |
+|---|---|
+| `--interval` | Every interval from when the rule was saved |
+| `--idle` | Once per idle period, after the session has been idle that long. Local sessions only |
+| `--daily` | Once a day at `HH:MM` local time |
+| `--rule-id` | The rule to write. Pass a stable id you choose (`wake-up`, `nag`) so a second run edits that rule. **Omitting it adds a new rule every run**: there is no per-session cap, so a retried command stacks duplicates that all fire |
+| `--disabled` | Saves the rule without arming it |
+
+All three print the rule list after the change, with `nextFireAt` per rule.
+Scheduling onto a crashed or ended session is refused. Set it on the session
+that should be woken, not on your own.
+
 ## Layout
 
 ```bash
-termdock layout get --json
+termdock layout get [--full] --json
 termdock layout set <type> [--sessions <id,id>] --json
 termdock layout assign <pane-id> <session-id|none> --json
 termdock layout activate <pane-id> --json
+termdock layout activate-panel <panel-id> --json
+termdock layout restore --file <path> --json
+```
+
+`activate` focuses a pane, `activate-panel` focuses a tab, which is the one to
+use for a background tab with no pane.
+
+**Save with `--full` if you intend to restore.** Without it you get the slim
+shape, where a pane carries only `id` and `terminalId`. Restore matches panes on
+their content bindings, which the slim shape does not have, so restoring one
+would apply the layout and leave every terminal unbound. `layout restore`
+rejects a slim file rather than doing that, but the fix is at capture time:
+
+```bash
+termdock layout get --full --json > /tmp/layout.json
+# rearrange, then put it back
+termdock layout restore --file /tmp/layout.json --json
 ```
 
 Layout types are the ones the app offers (`single`, `horizontal-2`, `vertical-2`, `quad`, and the 1-plus-2 variants). `layout get` tells you what exists now, including pane ids.

@@ -3,7 +3,7 @@ name: termdock-terminal
 displayName: Termdock Terminal
 description: Drive Termdock terminals from inside one. Open a session for a long job instead of blocking your own, read what another session is doing, send input to it, arrange panes, and schedule a wake-up. Use when work would otherwise block your terminal, when you need output from a session that is not yours, or when the user asks you to run something "in another tab".
 version: 4
-minAppVersion: 1.20.0
+minAppVersion: 1.21.0
 ---
 
 # Drive Termdock From Inside A Terminal
@@ -32,6 +32,13 @@ termdock session input "$id" "npm run build" --enter --json
 **Address a tab by its name.** Session names are unique, so `termdock session output build --mode text --json` works the same as passing the id. Better than an opaque `zsh-1787...` when you are writing something a human will read.
 
 **Arrange what the user sees.** Put the session you are talking about in front of them before you explain it.
+
+**Schedule a wake-up.** A keep-alive rule injects a message into a session on a
+schedule, for the case where work resumes later without a human to nudge it.
+
+```bash
+termdock session keepalive set <id> --rule-id wake-up --message "continue" --interval 30m --json
+```
 
 ## What this is not for
 
