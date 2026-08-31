@@ -27,7 +27,21 @@ curl -s -H "Authorization: Bearer $TERMINAL_API_TOKEN" \
 | `POST` | `/api/terminal/sessions/:id/interrupt` | Ctrl+C |
 | `DELETE` | `/api/terminal/sessions/:id` | Destroy |
 
-`:id` accepts a session id or a tab name.
+`:id` accepts a session id or a tab name. So do the layout endpoints below:
+`sessionIds`, the `assign` body's `sessionId`, and the `contentId` of each
+`terminal` pane in a restore snapshot.
+
+Name resolution: an id wins over a name; a name matching several sessions is not
+guessed at, it comes back as `SESSION_NOT_FOUND` with the closest candidate names.
+`SESSION_RESOLVE_FAILED` is a different failure, the resolution step itself broke
+and nothing was touched. Resolution happens once per request, and `/events` locks
+the id at subscribe time, so a tab renamed mid-flight can take a write meant for
+whoever holds the name now. Resolve once and address the id when that matters.
+`assign` echoes the resolved id back as `terminalId`. `restore` lists a snapshot
+target in `restored.unresolvedTargets` only when it is neither a live session id,
+nor a unique tab name, nor shaped like a session id (`zsh-`, `terminal-pty-`,
+`peer-term-`, `ssh-term-`). That combination means it was never an address. An id
+whose session already ended is the renderer's `skipped: CONTENT_NOT_FOUND` instead.
 
 ## Layout
 
