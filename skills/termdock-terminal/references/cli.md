@@ -53,7 +53,9 @@ termdock session destroy <id> --json
 `session attach` takes over the terminal you run it in. Leave it to a human.
 
 `session input` types; `session submit` types and waits for the echo to settle
-before sending the submit key, which is what interactive TUI prompts need.
+before sending the submit key, which is what interactive TUI prompts need. Text
+starting with `-` is fine for both (`session submit <id> "-y" --json`), so an
+interactive prompt expecting a flag-shaped answer is reachable.
 `session key` sends one named key (`up`, `enter`, `ctrl+c`, ...) and
 `session interrupt` is Ctrl+C without destroying the session.
 

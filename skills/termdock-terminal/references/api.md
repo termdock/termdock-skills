@@ -36,8 +36,13 @@ A keep-alive rule is `{"rule":{"id","enabled","schedule","message"}}`, where
 `schedule` is `{"kind":"interval","intervalMs":n}`,
 `{"kind":"idle","thresholdMs":n}` or `{"kind":"daily","time":"HH:mm"}`. All
 three respond with the rule list after the change. The message is injected with
-Enter, so it is submitted. `503 KEEPALIVE_UNAVAILABLE` means the tool layer is
-not running, which is not the same as "no rules".
+Enter, so it is submitted.
+
+Failures: `404 SESSION_NOT_FOUND` for an unknown session (all three check, so a
+typo is never a silent empty list or a successful delete), `409 CANNOT_SCHEDULE`
+when the session is crashed or ended, or the schedule is `idle` on a remote
+session, and `503 KEEPALIVE_UNAVAILABLE` when the tool layer is not running,
+which is not the same as "no rules".
 
 ## Layout
 
