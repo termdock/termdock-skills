@@ -50,7 +50,9 @@ whose session already ended is the renderer's `skipped: CONTENT_NOT_FOUND` inste
 `error.details.requestId` on failure. The same id is on Termdock's `/input`
 transaction log line with per-stage timings, so quoting it reconstructs that
 one request's lifecycle when a write seems lost or stalled. Sub-second
-successful data-only writes are the one case that is not logged.
+successful data-only writes are the one case that is not logged. A PTY write
+that throws answers `500 TERMINAL_WRITE_FAILED`, still with
+`error.details.requestId`.
 
 A keep-alive rule is `{"rule":{"id","enabled","schedule","message"}}`, where
 `schedule` is `{"kind":"interval","intervalMs":n}`,
