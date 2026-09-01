@@ -117,9 +117,14 @@ on a loop for either: `409` clears when that run settles, and sending again whil
 it is in flight puts two turns into the same conversation. A timed-out message
 that never settles does not park the session forever either: after 10 minutes
 (`staleDispatchTimeoutMs`) with no restart or `DELETE` taking over, Termdock
-force-evicts the record and every path for that id starts answering `404`.
-`lifetime.evictsAt` stays `null` during that window, so do not read `null` as
-the absence of a deadline; escalate to restart or `DELETE` well before it.
+force-evicts the record. `GET /:id`, input, and `DELETE` answer `404` and
+`restart` answers `409 AGENT_SESSION_RESTART_UNAVAILABLE` (cached create input
+is gone; use `attach`) for that id afterwards, and the id no longer appears in the list even
+when the provider daemon still knows the conversation. The one way back is an
+explicit `attach`, which re-adopts the daemon-persisted conversation as a new
+lifecycle. `lifetime.evictsAt` stays `null` during that window, so do not read
+`null` as the absence of a deadline; escalate to restart or `DELETE` well
+before it.
 
 `restart` is the way out of both, but it is not guaranteed to work on the first
 call. It only recreates the session once the abandoned run has settled on its
