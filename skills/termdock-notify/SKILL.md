@@ -2,7 +2,7 @@
 name: termdock-notify
 displayName: Termdock Notify
 description: Pushes a message to the user's phone (Discord/Telegram) from a Termdock terminal. Use when you finish work the user is waiting on, when you are blocked and need their decision, or when something changed that invalidates the plan they approved. Skip when the user is clearly at the keyboard, and never for progress narration.
-version: 3
+version: 4
 minAppVersion: 1.20.0
 ---
 

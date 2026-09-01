@@ -27,6 +27,8 @@ curl -s -X POST -H "Authorization: Bearer $TERMINAL_API_TOKEN" \
 | `502` | `NOTIFY_NOT_DELIVERED` | Reached the service, went nowhere. The reason is in `error.message` |
 | `503` | `REMOTE_CONTROL_UNAVAILABLE` | Remote control is not running |
 
+`error.code` is the stable field for callers. In particular, rejected notify input uses `INVALID_NOTIFY_MESSAGE`, not the terminal tool bridge's `INVALID_TOOL_INPUT`.
+
 **A 2xx is the only evidence the user saw anything.** Everything else means the message is still yours to deliver some other way.
 
 ## Token
