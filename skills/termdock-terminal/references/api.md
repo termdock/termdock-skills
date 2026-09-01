@@ -142,7 +142,10 @@ the session was left intact, so the operation is safe to repeat. A failed
 retention clock (`lifetime.evictsAt` is set); no `killed` lifecycle is
 published, input keeps answering `409` while an abandoned run is still blocking,
 and repeating the `DELETE` while the record lasts is safe and lifts that block
-when it succeeds.
+when it succeeds. A `DELETE` on a session that already settled (`completed`,
+`killed`, or `failed` with nothing still in flight) answers
+`409 SESSION_NOT_RUNNING` without touching the stored state or publishing
+`session.error`.
 
 ## Remote push
 
