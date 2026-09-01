@@ -52,7 +52,8 @@ whose session already ended is the renderer's `skipped: CONTENT_NOT_FOUND` inste
 transaction log line with per-stage timings, so quoting it reconstructs that
 one request's lifecycle when a write seems lost or stalled. Sub-second
 successful data-only writes are the one case that is not logged. A PTY write
-that throws answers `500 TERMINAL_WRITE_FAILED`, still with
+that throws answers `500 TERMINAL_WRITE_FAILED`, still with `error.details.stage`
+(`lock` / `readiness` / `chain` / `write`) and
 `error.details.requestId`.
 
 A keep-alive rule is `{"rule":{"id","enabled","schedule","message"}}`, where
