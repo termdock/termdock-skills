@@ -54,7 +54,8 @@ one request's lifecycle when a write seems lost or stalled. Sub-second
 successful data-only writes are the one case that is not logged. A PTY write
 that throws answers `500 TERMINAL_WRITE_FAILED`, still with `error.details.stage`
 (`lock` / `readiness` / `chain` / `write`) and
-`error.details.requestId`.
+`error.details.requestId`; a session destroyed while the request was queued answers
+`404 SESSION_NOT_FOUND` instead.
 
 A keep-alive rule is `{"rule":{"id","enabled","schedule","message"}}`, where
 `schedule` is `{"kind":"interval","intervalMs":n}`,
