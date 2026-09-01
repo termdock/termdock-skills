@@ -52,11 +52,20 @@ A keep-alive rule is `{"rule":{"id","enabled","schedule","message"}}`, where
 three respond with the rule list after the change. The message is injected with
 Enter, so it is submitted.
 
-Failures: `404 SESSION_NOT_FOUND` for an unknown session (all three check, so a
-typo is never a silent empty list or a successful delete), `409 CANNOT_SCHEDULE`
-when the session is crashed or ended, or the schedule is `idle` on a remote
-session, and `503 KEEPALIVE_UNAVAILABLE` when the tool layer is not running,
-which is not the same as "no rules".
+Failures: `400 INVALID_TOOL_INPUT` when the rule body fails the schema (a
+missing field, or a schedule that is not one of the three kinds), `404
+SESSION_NOT_FOUND` for an unknown session (all three check, so a typo is never a
+silent empty list or a successful delete), `409 CANNOT_SCHEDULE` when the
+session is crashed or ended, or the schedule is `idle` on a remote session, and
+`503 KEEPALIVE_UNAVAILABLE` when the tool layer is not running, which is not the
+same as "no rules".
+
+`INVALID_TOOL_INPUT` is not keep-alive specific: any body the tool schema
+rejects comes back as 400 on the session, keep-alive, layout and workspace
+endpoints. Resending it unchanged never succeeds, so fix the body instead of
+retrying. A 500 `TOOL_CALL_FAILED` is the other case, where the tool itself
+broke and a retry can make sense. `/api/terminal/notify` answers a rejected
+message with `400 INVALID_NOTIFY_MESSAGE` instead: same status, different code.
 
 ## Layout
 
