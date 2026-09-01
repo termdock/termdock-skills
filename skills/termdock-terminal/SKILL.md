@@ -2,13 +2,15 @@
 name: termdock-terminal
 displayName: Termdock Terminal
 description: Drive Termdock terminals from inside one. Open a session for a long job instead of blocking your own, read what another session is doing, send input to it, arrange panes, and schedule a wake-up. Use when work would otherwise block your terminal, when you need output from a session that is not yours, or when the user asks you to run something "in another tab".
-version: 12
+version: 13
 minAppVersion: 1.21.0
 ---
 
 # Drive Termdock From Inside A Terminal
 
-You are running in a Termdock terminal. The `termdock` CLI is on PATH and already authenticated for this machine: it mints a local token against loopback by itself. `$TERMDOCK_SESSION_ID` is your own session.
+You are running in a Termdock terminal. `$TERMDOCK_SESSION_ID` is your own session.
+
+The `termdock` CLI is opt-in: the user installs it from the app, so check `$TERMDOCK_CLI_INSTALLED` before leaning on it. `1` means the CLI is on PATH and already authenticated for this machine: it mints a local token against loopback by itself. `0` means the app did not install its own shim, but a `termdock` from elsewhere may still exist: run `command -v termdock` first and use it if present. Only when the command is missing is there no workaround from inside the session (the HTTP API needs a bearer token and only the CLI mints one). Then ask the user to open **Settings -> Skills -> Command Line Tool** and press **Install**, then confirm with `command -v termdock` and continue; if the command is still missing, have them open a new session.
 
 ```bash
 termdock session list --json                       # what else is running
