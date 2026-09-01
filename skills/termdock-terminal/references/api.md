@@ -46,6 +46,12 @@ nor a unique tab name, nor shaped like a session id (`zsh-`, `terminal-pty-`,
 `peer-term-`, `ssh-term-`). That combination means it was never an address. An id
 whose session already ended is the renderer's `skipped: CONTENT_NOT_FOUND` instead.
 
+`/input` answers with a `requestId`: `data.requestId` on success,
+`error.details.requestId` on failure. The same id is on Termdock's `/input`
+transaction log line with per-stage timings, so quoting it reconstructs that
+one request's lifecycle when a write seems lost or stalled. Sub-second
+successful data-only writes are the one case that is not logged.
+
 A keep-alive rule is `{"rule":{"id","enabled","schedule","message"}}`, where
 `schedule` is `{"kind":"interval","intervalMs":n}`,
 `{"kind":"idle","thresholdMs":n}` or `{"kind":"daily","time":"HH:mm"}`. All
