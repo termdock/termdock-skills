@@ -114,15 +114,26 @@ within that cap, which releases the wait without cancelling the work, so the
 message may still have reached the agent; and `409 AGENT_SESSION_DISPATCH_BUSY`
 when a message that timed out earlier has not settled yet. Do not retry the input
 on a loop for either: `409` clears when that run settles, and sending again while
-it is in flight puts two turns into the same conversation.
+it is in flight puts two turns into the same conversation. A timed-out message
+that never settles does not park the session forever either: after 10 minutes
+(`staleDispatchTimeoutMs`) with no restart or `DELETE` taking over, Termdock
+force-evicts the record and every path for that id starts answering `404`.
+`lifetime.evictsAt` stays `null` during that window, so do not read `null` as
+the absence of a deadline; escalate to restart or `DELETE` well before it.
 
 `restart` is the way out of both, but it is not guaranteed to work on the first
 call. It only recreates the session once the abandoned run has settled on its
 own, so it answers `409 AGENT_SESSION_DISPATCH_BUSY` while that run is still in
 flight, and `504 AGENT_SESSION_PROVIDER_STOP_TIMEOUT` when the stop call itself
 does not report back within 30 seconds. `interrupt` and `DELETE` share that 30
-second cap and the same `504`. In every one of these cases nothing was recreated
-and the session was left intact, so the operation is safe to repeat.
+second cap and the same `504`, and `DELETE` answers `500` when the provider
+cannot reach its daemon. For restart and `interrupt`, nothing was recreated and
+the session was left intact, so the operation is safe to repeat. A failed
+`DELETE` instead marks the session `failed` with `lastError` and arms the
+retention clock (`lifetime.evictsAt` is set); no `killed` lifecycle is
+published, input keeps answering `409` while an abandoned run is still blocking,
+and repeating the `DELETE` while the record lasts is safe and lifts that block
+when it succeeds.
 
 ## Remote push
 
