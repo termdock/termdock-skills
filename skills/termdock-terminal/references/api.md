@@ -122,7 +122,9 @@ force-evicts the record. `GET /:id`, input, and `DELETE` answer `404` and
 is gone; use `attach`) for that id afterwards, and the id no longer appears in the list even
 when the provider daemon still knows the conversation. The one way back is an
 explicit `attach`, which re-adopts the daemon-persisted conversation as a new
-lifecycle. `lifetime.evictsAt` stays `null` during that window, so do not read
+lifecycle, and it only succeeds once the abandoned run has settled: while that
+run is still in flight, `attach` answers `409 AGENT_SESSION_DISPATCH_BUSY` too,
+and the rejection clears on its own when the run settles. `lifetime.evictsAt` stays `null` during that window, so do not read
 `null` as the absence of a deadline; escalate to restart or `DELETE` well
 before it.
 
