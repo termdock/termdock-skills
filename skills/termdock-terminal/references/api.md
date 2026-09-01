@@ -125,6 +125,13 @@ Separate from terminal sessions: these are SDK-driven agent conversations, not P
 
 `resolve` returns that conversation id in its `sessionId` field, and `attach` accepts either form. Every other path above addresses a single run, so pass the `sessionId` that create or attach returned. Resolving and then calling `GET /:id` with the resolved id gives you a 404.
 
+`/rendered` returns the full retained view. `/rendered/stream` frames are each capped
+at 56 KiB: when the view is bigger, the frame drops the oldest entries first and
+rebuilds `transcript` from what remains, so treat a frame as the newest window and
+resync from `/rendered` when you need older history. The cap is not a liveness
+guarantee: consecutive updates can still close the stream as a slow consumer, so
+on disconnect resync from `/rendered` and reconnect.
+
 Input is dispatched one message at a time per session, capped at 180 seconds.
 Failures: `504 AGENT_SESSION_DISPATCH_TIMEOUT` when the provider does not settle
 within that cap, which releases the wait without cancelling the work, so the
