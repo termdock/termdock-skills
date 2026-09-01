@@ -45,6 +45,10 @@ target in `restored.unresolvedTargets` only when it is neither a live session id
 nor a unique tab name, nor shaped like a session id (`zsh-`, `terminal-pty-`,
 `peer-term-`, `ssh-term-`). That combination means it was never an address. An id
 whose session already ended is the renderer's `skipped: CONTENT_NOT_FOUND` instead.
+`activePanelId` resolves the same way, so a unique tab name works there too; it
+never enters `unresolvedTargets` because it can also legitimately be a file panel
+id, and a value that does not resolve is passed through, with the response's
+`activePanelId` reporting the focus actually kept.
 
 `/input` answers with a `requestId` once the request reaches input handling:
 `data.requestId` on success, `error.details.requestId` on failure (400
@@ -91,10 +95,11 @@ message with `400 INVALID_NOTIFY_MESSAGE` instead: same status, different code.
 | `POST` | `/api/terminal/layout/restore` | Restore a layout snapshot, in the shape `?full=true` returns |
 
 Capture the snapshot you intend to restore with `?full=true`. Restore binds panes
-by `contentType` / `contentId`, which the default slim shape does not carry, so
-posting a slim snapshot applies the layout, leaves every terminal unbound, and
-still answers `success: true` with an empty `restored.skipped`. Check the shape
-before posting; the `termdock layout restore` subcommand refuses slim files.
+by `contentType` / `contentId`, which the default slim shape does not carry:
+posting a slim snapshot still applies the layout with every pane left empty, and
+each slim pane comes back under `restored.skipped` with `reason: "SLIM_PANE"`,
+so the response signals that nothing was bound. The `termdock layout restore`
+subcommand keeps refusing slim files outright.
 
 ## Agent sessions
 
