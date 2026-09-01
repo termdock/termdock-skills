@@ -108,6 +108,22 @@ Separate from terminal sessions: these are SDK-driven agent conversations, not P
 
 `resolve` returns that conversation id in its `sessionId` field, and `attach` accepts either form. Every other path above addresses a single run, so pass the `sessionId` that create or attach returned. Resolving and then calling `GET /:id` with the resolved id gives you a 404.
 
+Input is dispatched one message at a time per session, capped at 180 seconds.
+Failures: `504 AGENT_SESSION_DISPATCH_TIMEOUT` when the provider does not settle
+within that cap, which releases the wait without cancelling the work, so the
+message may still have reached the agent; and `409 AGENT_SESSION_DISPATCH_BUSY`
+when a message that timed out earlier has not settled yet. Do not retry the input
+on a loop for either: `409` clears when that run settles, and sending again while
+it is in flight puts two turns into the same conversation.
+
+`restart` is the way out of both, but it is not guaranteed to work on the first
+call. It only recreates the session once the abandoned run has settled on its
+own, so it answers `409 AGENT_SESSION_DISPATCH_BUSY` while that run is still in
+flight, and `504 AGENT_SESSION_PROVIDER_STOP_TIMEOUT` when the stop call itself
+does not report back within 30 seconds. `interrupt` and `DELETE` share that 30
+second cap and the same `504`. In every one of these cases nothing was recreated
+and the session was left intact, so the operation is safe to repeat.
+
 ## Remote push
 
 | Method | Path | Purpose |
