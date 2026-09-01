@@ -143,9 +143,10 @@ retention clock (`lifetime.evictsAt` is set); no `killed` lifecycle is
 published, input keeps answering `409` while an abandoned run is still blocking,
 and repeating the `DELETE` while the record lasts is safe and lifts that block
 when it succeeds. A `DELETE` on a session that already settled (`completed`,
-`killed`, or `failed` with nothing still in flight) answers
-`409 SESSION_NOT_RUNNING` without touching the stored state or publishing
-`session.error`.
+`killed`, or `failed` with nothing still in flight) leaves the stored state
+alone and publishes no `session.error`: the retention clock stays, or is armed
+if it was missing. `409 SESSION_NOT_RUNNING` is only the usual exit there; a
+provider error still answers `500` and the stop cap `504`.
 
 ## Remote push
 
