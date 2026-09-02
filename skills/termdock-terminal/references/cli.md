@@ -80,7 +80,7 @@ submitted. Durations need a unit (`90s`, `30m`, `2h`); a bare number is rejected
 | `--interval` | Every interval from when the rule was saved |
 | `--idle` | Once per idle period, after the session has been idle that long. Local sessions only |
 | `--daily` | Once a day at `HH:MM` local time |
-| `--rule-id` | The rule to write. Pass a stable id you choose (`wake-up`, `nag`) so a second run edits that rule. **Omitting it adds a new rule every run**: there is no per-session cap, so a retried command stacks duplicates that all fire |
+| `--rule-id` | The rule to write. Pass a stable id you choose (`wake-up`, `nag`) so a second run edits that rule. **Omitting it adds a new rule every run**: each session holds at most **10 enabled rules**, so a retried command without `--rule-id` eventually hits `MAX_RULES_PER_SESSION` |
 | `--disabled` | Saves the rule without arming it |
 
 All three print the rule list after the change, with `nextFireAt` per rule.

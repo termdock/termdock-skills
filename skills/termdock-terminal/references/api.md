@@ -68,8 +68,14 @@ A keep-alive rule is `{"rule":{"id","enabled","schedule","message"}}`, where
 three respond with the rule list after the change. The message is injected with
 Enter, so it is submitted.
 
+Each session holds at most **10 enabled rules**. Adding an eleventh enabled rule with a new `id` is
+rejected with `400 MAX_RULES_PER_SESSION`. Updating an existing rule (same `id`) does
+not count against the limit. Disabled rules do not count; delete rules you no longer need.
+
 Failures: `400 INVALID_TOOL_INPUT` when the rule body fails the schema (a
-missing field, or a schedule that is not one of the three kinds), `404
+missing field, or a schedule that is not one of the three kinds), `400
+MAX_RULES_PER_SESSION` when the session already has 10 enabled rules and the request
+would enable another (disable or delete an existing rule before enabling another), `404
 SESSION_NOT_FOUND` for an unknown session (all three check, so a typo is never a
 silent empty list or a successful delete), `409 CANNOT_SCHEDULE` when the
 session is crashed or ended, or the schedule is `idle` on a remote session, and
