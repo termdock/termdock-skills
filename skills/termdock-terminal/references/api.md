@@ -107,6 +107,11 @@ each slim pane comes back under `restored.skipped` with `reason: "SLIM_PANE"`,
 so the response signals that nothing was bound. The `termdock layout restore`
 subcommand keeps refusing slim files outright.
 
+The slim shape now carries an optional `contentType` field (#2150). A file pane
+(`contentType: "file"`) is reported under `restored.skipped` with
+`contentType: "file"` and `contentId` set to the pane id, instead of being
+silently dropped. Older clients that omit `contentType` continue to work.
+
 ## Agent sessions
 
 Separate from terminal sessions: these are SDK-driven agent conversations, not PTYs.

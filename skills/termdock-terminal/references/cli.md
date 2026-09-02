@@ -102,10 +102,12 @@ termdock layout restore --file <path> --json
 use for a background tab with no pane.
 
 **Save with `--full` if you intend to restore.** Without it you get the slim
-shape, where a pane carries only `id` and `terminalId`. Restore matches panes on
-their content bindings, which the slim shape does not have, so restoring one
-would apply the layout and leave every terminal unbound. `layout restore`
-rejects a slim file rather than doing that, but the fix is at capture time:
+shape, where a pane carries `id`, `terminalId`, and an optional `contentType`
+(#2150). Restore matches panes on their content bindings, which the slim shape
+does not have, so restoring one would apply the layout and leave every pane
+unbound. `layout restore` rejects a slim file rather than doing that, but the
+fix is at capture time. File panes in a slim snapshot are now reported under
+`restored.skipped` with `contentType: "file"` instead of being silently dropped.
 
 ```bash
 termdock layout get --full --json > /tmp/layout.json
