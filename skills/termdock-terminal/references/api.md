@@ -139,7 +139,9 @@ backpressure detection (#2152): a single large frame does not close the stream.
 The stream waits up to 5 s for the socket to drain; if the socket does not drain
 within that window, or if more than 4 MiB of serialized frames queue up while waiting,
 the server closes the stream as a slow consumer. On disconnect resync from `/rendered`
-and reconnect.
+and reconnect. `/events` applies the same detection; its backlog replay on connect
+(`since`) pauses while the socket is backpressured, so a normal reader gets the whole
+backlog whatever its size.
 
 Input is dispatched one message at a time per session, capped at 180 seconds.
 Failures: `504 AGENT_SESSION_DISPATCH_TIMEOUT` when the provider does not settle
