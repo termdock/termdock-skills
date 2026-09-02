@@ -137,9 +137,9 @@ rebuilds `transcript` from what remains, so treat a frame as the newest window a
 resync from `/rendered` when you need older history. The server uses drain-based
 backpressure detection (#2152): a single large frame does not close the stream.
 The stream waits up to 5 s for the socket to drain; if the socket does not drain
-within that window, or if more than 3 events queue up while waiting, the server
-closes the stream as a slow consumer. On disconnect resync from `/rendered` and
-reconnect.
+within that window, or if more than 4 MiB of serialized frames queue up while waiting,
+the server closes the stream as a slow consumer. On disconnect resync from `/rendered`
+and reconnect.
 
 Input is dispatched one message at a time per session, capped at 180 seconds.
 Failures: `504 AGENT_SESSION_DISPATCH_TIMEOUT` when the provider does not settle
