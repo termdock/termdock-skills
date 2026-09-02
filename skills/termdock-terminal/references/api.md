@@ -134,9 +134,12 @@ Separate from terminal sessions: these are SDK-driven agent conversations, not P
 `/rendered` returns the full retained view. `/rendered/stream` frames are each capped
 at 56 KiB: when the view is bigger, the frame drops the oldest entries first and
 rebuilds `transcript` from what remains, so treat a frame as the newest window and
-resync from `/rendered` when you need older history. The cap is not a liveness
-guarantee: consecutive updates can still close the stream as a slow consumer, so
-on disconnect resync from `/rendered` and reconnect.
+resync from `/rendered` when you need older history. The server uses drain-based
+backpressure detection (#2152): a single large frame does not close the stream.
+The stream waits up to 5 s for the socket to drain; if the socket does not drain
+within that window, or if more than 3 events queue up while waiting, the server
+closes the stream as a slow consumer. On disconnect resync from `/rendered` and
+reconnect.
 
 Input is dispatched one message at a time per session, capped at 180 seconds.
 Failures: `504 AGENT_SESSION_DISPATCH_TIMEOUT` when the provider does not settle
