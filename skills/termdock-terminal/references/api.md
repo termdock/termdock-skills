@@ -16,6 +16,7 @@ curl -s -H "Authorization: Bearer $TERMINAL_API_TOKEN" \
 | `GET` | `/api/terminal/workspaces` | Workspaces, and their ids for creating sessions |
 | `POST` | `/api/terminal/sessions` | Create. Body takes `workspaceId`, `name`, `background` |
 | `GET` | `/api/terminal/sessions` | List. `?workspaceId=` filters |
+| `PATCH` | `/api/terminal/sessions/:id` | Rename. Body is `{ "name": "..." }`; returns the applied `{ "sessionId", "name" }` |
 | `GET` | `/api/terminal/sessions/:id/status` | Activity, whether it is waiting at a prompt |
 | `GET` | `/api/terminal/sessions/:id/output` | Read. `?mode=raw\|text\|content\|screen`, `?lines=`, `?since=` |
 | `GET` | `/api/terminal/sessions/:id/events` | Same content as an SSE stream |
@@ -49,6 +50,11 @@ whose session already ended is the renderer's `skipped: CONTENT_NOT_FOUND` inste
 never enters `unresolvedTargets` because it can also legitimately be a file panel
 id, and a value that does not resolve is passed through, with the response's
 `activePanelId` reporting the focus actually kept.
+
+Rename uses the same global uniqueness guard as the UI. The returned `name` is
+the address to retain: a collision adds a `-2`, `-3`, ... suffix. SSH rename
+waits for its durable registry write before success; persistence failure returns
+`PERSIST_FAILED` instead of advertising a name that disappears after restart.
 
 `/input` answers with a `requestId` once the request reaches input handling:
 `data.requestId` on success, `error.details.requestId` on failure (400

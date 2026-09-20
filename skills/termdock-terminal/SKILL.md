@@ -2,7 +2,7 @@
 name: termdock-terminal
 displayName: Termdock Terminal
 description: Drive Termdock terminals from inside one. Open a session for a long job instead of blocking your own, read what another session is doing, send input to it, arrange panes, and schedule a wake-up. Use when work would otherwise block your terminal, when you need output from a session that is not yours, or when the user asks you to run something "in another tab".
-version: 19
+version: 20
 minAppVersion: 1.21.0
 ---
 
@@ -32,6 +32,13 @@ termdock session input "$id" "npm run build" --enter --json
 **Read a session that is not yours.** The user says "the other tab is stuck" and you can look, instead of asking them to paste.
 
 **Address a tab by its name.** Session names are unique, so `termdock session output build --mode text --json` works the same as passing the id. Better than an opaque `zsh-1787...` when you are writing something a human will read.
+
+Rename a session when its current tab name is no longer a useful address. The
+response contains the actual unique name, which can gain a numeric suffix:
+
+```bash
+termdock session rename <id> build --json
+```
 
 **Arrange what the user sees.** Put the session you are talking about in front of them before you explain it.
 
