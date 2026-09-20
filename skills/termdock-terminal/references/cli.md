@@ -24,6 +24,7 @@ termdock workspace list --json    # workspace ids, which is what session create 
 ```bash
 termdock session create --workspace <id> [--name <name>] [--background] --json
 termdock session list [--workspace <id>] --json
+termdock session rename <id> <name> --json
 termdock session output <id> [--mode raw|text|content|screen] [--lines <n>] [--since <cursor>] --json
 termdock session output <id> [--mode raw|text|content] [--lines <n>] [--since <cursor>] --follow [--json]
 termdock session input <id> <text> [--enter] --json
@@ -38,6 +39,11 @@ termdock session destroy <id> --json
 ```
 
 `<id>` accepts a session id or a tab name; names are unique.
+
+`session rename` returns `{ "sessionId", "name" }`. Use the returned `name`:
+the global uniqueness guard may apply a `-2`, `-3`, ... suffix when another tab
+already has the requested name. SSH rename only succeeds after its durable
+registry write, so a reported name survives restart.
 
 | Flag | Notes |
 |---|---|
