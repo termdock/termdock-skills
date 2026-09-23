@@ -93,6 +93,27 @@ All three print the rule list after the change, with `nextFireAt` per rule.
 Scheduling onto a crashed or ended session is refused. Set it on the session
 that should be woken, not on your own.
 
+## External monitor callbacks to an agent
+
+```bash
+termdock agent callback <agent-session-id-or-tab-name> \
+  --source <source> --event-kind <kind> --message <text> \
+  [--dedupe-key <key>] [--metadata <json-object>] --json
+```
+
+The target must belong to an existing AgentSession; a shell-only tab is
+rejected, never typed into. `--source`, `--event-kind`, and `--message` are
+required. `--metadata` takes a JSON object. The command returns the agent
+`sessionId`, a unique `deliveryId`, and ISO `createdAt`. Repeating a
+`--dedupe-key` still sends another event: Termdock does not deduplicate or
+automatically retry. The receipt confirms provider send, not completion of the
+agent's work. After a timeout, reconcile before resending. Callback metadata
+is not an authenticated sender identity. Ordinary `session input` still types
+directly into a terminal and does not add callback metadata.
+An OpenCode daemon callback waits up to 30 seconds for the current turn to
+finish; if it is still busy, the command reports
+`AGENT_SESSION_CALLBACK_CONFLICT` without interrupting that turn.
+
 ## Layout
 
 ```bash
