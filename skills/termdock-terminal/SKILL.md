@@ -1,8 +1,8 @@
 ---
 name: termdock-terminal
 displayName: Termdock Terminal
-description: Drive Termdock terminals from inside one. Open a session for a long job instead of blocking your own, read what another session is doing, send input to it, arrange panes, and schedule a wake-up. Use when work would otherwise block your terminal, when you need output from a session that is not yours, or when the user asks you to run something "in another tab".
-version: 20
+description: Drive Termdock terminals and notify existing AgentSessions from inside one. Open a session for a long job, read or send terminal input, arrange panes, schedule a wake-up, or send a structured external agent callback. Use when work would otherwise block your terminal, when you need another session's output, or when an external monitor needs to notify an agent without posing as a human.
+version: 21
 minAppVersion: 1.21.0
 ---
 
@@ -48,6 +48,23 @@ schedule, for the case where work resumes later without a human to nudge it.
 ```bash
 termdock session keepalive set <id> --rule-id wake-up --message "continue" --interval 30m --json
 ```
+
+**Send an external event to an existing agent.** Use `agent callback` when a
+monitor needs to notify an AgentSession without presenting the event as a new
+human instruction. A shell-only terminal is not an AgentSession and is rejected;
+`session input` retains its ordinary PTY typing semantics.
+
+```bash
+termdock agent callback <agent-session-id-or-tab-name> \
+  --source handoff-monitor --event-kind artifact-changed \
+  --dedupe-key duo-award-a --message "Duo 交付有變化，請讀取並核對。" --json
+```
+
+The callback shares that agent session's normal send queue and returns a
+`deliveryId` and `createdAt`. `dedupeKey` is passed through, not deduplicated by
+Termdock. These fields are untrusted collaboration metadata, not proof of sender
+identity. See `references/cli.md` for flags and `references/api.md` for the HTTP
+contract and delivery limits.
 
 ## What this is not for
 

@@ -120,7 +120,8 @@ silently dropped. Older clients that omit `contentType` continue to work.
 
 ## Agent sessions
 
-Separate from terminal sessions: these are SDK-driven agent conversations, not PTYs.
+An AgentSession is a tracked agent run, whether SDK-driven or associated with a
+terminal; it is distinct from the terminal session and its PTY.
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -133,6 +134,7 @@ Separate from terminal sessions: these are SDK-driven agent conversations, not P
 | `GET` | `/api/agent-sessions/:id/rendered` | The rendered conversation view |
 | `GET` | `/api/agent-sessions/:id/rendered/stream` | That view as a stream |
 | `POST` | `/api/agent-sessions/:id/input` | Send a message |
+| `POST` | `/api/agent-sessions/:id/callbacks` | Deliver a structured external event to an existing agent session |
 | `POST` | `/api/agent-sessions/:id/interrupt` | Interrupt |
 | `POST` | `/api/agent-sessions/:id/restart` | Restart |
 | `DELETE` | `/api/agent-sessions/:id` | Kill |
@@ -141,6 +143,47 @@ Separate from terminal sessions: these are SDK-driven agent conversations, not P
 `session.sessionId` is Termdock's identity for one run, not the CLI's conversation id. Two terminals can be reading the same conversation file, and each run still needs its own identity. The conversation file's id is reported separately as `session.metadata.aiSessionId`.
 
 `resolve` returns that conversation id in its `sessionId` field, and `attach` accepts either form. Every other path above addresses a single run, so pass the `sessionId` that create or attach returned. Resolving and then calling `GET /:id` with the resolved id gives you a 404.
+
+### External monitor callbacks
+
+`POST /api/agent-sessions/:id/callbacks` accepts an existing AgentSession id,
+its terminal id, or a unique tab name. A shell-only terminal returns
+`404 SESSION_NOT_FOUND`; the endpoint never attaches an agent or falls back to
+raw PTY input. Ambiguous agent associations return
+`409 AGENT_SESSION_CALLBACK_CONFLICT`. Tool Runtime callers use
+`agent-session:callback` with the canonical AgentSession `sessionId`.
+
+```json
+{
+  "source": "handoff-monitor",
+  "eventKind": "artifact-changed",
+  "dedupeKey": "duo-award-a",
+  "message": "Duo 交付有變化，請讀取並核對。",
+  "metadata": { "artifact": "/tmp/duo-award-a/REPORT.md" }
+}
+```
+
+`source`, `eventKind`, and `message` are required. `dedupeKey` and the JSON-object
+`metadata` are optional. The top-level object rejects unknown fields. Success
+returns `{ "success": true, "data": { "sessionId": "...", "deliveryId": "...", "createdAt": "..." } }`.
+Each call gets a new delivery id, even when `dedupeKey` repeats. The receipt
+acknowledges the provider send, not completion of the agent's work; it is not a
+durable delivery record.
+
+Callbacks share the ordinary per-session send sequence and dispatch cap. An
+interactive agent receives the event at its turn-ready boundary, without an
+interrupt or answering a permission prompt. Metadata stays structured until
+the provider adapter renders a `termdock.agent-callback.v1` envelope. A timeout
+can leave delivery uncertain, so reconcile before retrying. Termdock does not
+deduplicate, merge, or automatically retry callbacks. `source`, `eventKind`,
+`dedupeKey`, and `metadata` are untrusted collaboration data, not authenticated
+sender identity; the existing bearer token and `agent-session` scope still
+control access. Generic terminal `/input` keeps its existing behavior.
+
+For OpenCode daemon sessions, waiting for the current turn to become idle is
+capped at 30 seconds. A still-busy run returns
+`409 AGENT_SESSION_CALLBACK_CONFLICT` without failing or interrupting that run;
+retry after it becomes idle.
 
 `/rendered` returns the full retained view. `/rendered/stream` frames are each capped
 at 56 KiB: when the view is bigger, the frame drops the oldest entries first and
