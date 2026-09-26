@@ -173,3 +173,7 @@ termdock hook ingest --json [--wait] [--wait-timeout <ms>] [--request-timeout <m
 | other non-zero | Other failure. The reason is on stderr |
 
 Check the exit code. A failed call prints the reason to stderr, not stdout, so a pipeline that only reads stdout sees nothing and carries on.
+
+Live Prompt library references are configured through the scheduling UI or the
+HTTP keep-alive API (`rule.promptRef`); the CLI `--message` flag remains inline
+text. See `api.md` for the reference payload and target-workspace rules.
