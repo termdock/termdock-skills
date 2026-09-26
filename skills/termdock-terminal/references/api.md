@@ -6,7 +6,7 @@ Base URL is `http://127.0.0.1:<port>`; get the port from `termdock hostinfo --js
 
 ```bash
 curl -s -H "Authorization: Bearer $TERMINAL_API_TOKEN" \
-  http://127.0.0.1:3036/api/terminal/sessions
+  "http://127.0.0.1:$PORT/api/terminal/sessions"   # PORT from services.terminalApi.port
 ```
 
 ## Terminal sessions

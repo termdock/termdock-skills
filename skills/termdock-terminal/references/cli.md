@@ -1,6 +1,6 @@
 # CLI reference
 
-`termdock` talks to the Terminal API over loopback and mints its own token there, so nothing needs configuring on the machine running Termdock. Everything below takes `--url <url>` and `--token <token>` if you are pointing at another machine.
+`termdock` talks to the Terminal API over loopback and mints its own token there, so nothing needs configuring on the machine running Termdock. To point at another machine, put `--url <url>` and `--token <token>` before the subcommand: `termdock --url <url> --token <token> session list --json`.
 
 Most subcommands require `--json` and print one JSON object. `notify` is the exception; `--json` is optional there.
 
@@ -147,7 +147,7 @@ Layout types are the ones the app offers (`single`, `horizontal-2`, `vertical-2`
 ## Notifying the user
 
 ```bash
-termdock notify <message> [--session <id>] [--json]
+termdock notify <message> [--session <id>] [--title <text>] [--json]
 ```
 
 Pushes to the Discord/Telegram remote the user configured. Session defaults to `$TERMDOCK_SESSION_ID`. See the `termdock-notify` skill for when this is appropriate; it is not for progress narration.
@@ -168,7 +168,7 @@ termdock hook ingest --json [--wait] [--wait-timeout <ms>] [--request-timeout <m
 | Code | Meaning |
 |---|---|
 | `0` | Success |
-| `64` | Usage error: unknown flag, missing value, wrong argument shape |
+| `64` | The request was rejected: either a usage error (unknown flag, missing value, wrong argument shape), or Termdock answered with a 4xx such as `SESSION_NOT_FOUND` or `MAX_RULES_PER_SESSION`. Stderr says which: API rejections start with `Termdock Terminal API error:` |
 | `69` | Termdock did not give a usable answer: unreachable, or it answered with a 5xx. `notify` returning "not delivered" lands here too |
 | other non-zero | Other failure. The reason is on stderr |
 
