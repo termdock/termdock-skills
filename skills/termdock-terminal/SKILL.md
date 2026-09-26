@@ -2,8 +2,8 @@
 name: termdock-terminal
 displayName: Termdock Terminal
 description: Drive Termdock terminals and notify existing AgentSessions from inside one. Open a session for a long job, read or send terminal input, arrange panes, schedule a wake-up, or send a structured external agent callback. Use when work would otherwise block your terminal, when you need another session's output, or when an external monitor needs to notify an agent without posing as a human.
-version: 21
-minAppVersion: 1.21.0
+version: 23
+minAppVersion: 1.22.0
 ---
 
 # Drive Termdock From Inside A Terminal

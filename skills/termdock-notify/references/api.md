@@ -6,8 +6,10 @@ For callers that cannot run the CLI. The CLI is a thin wrapper over this.
 curl -s -X POST -H "Authorization: Bearer $TERMINAL_API_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"message":"build is green","sessionId":"<sessionId>"}' \
-  http://127.0.0.1:3036/api/terminal/notify
+  http://127.0.0.1:<port>/api/terminal/notify
 ```
+
+`<port>` is 3037 for the installed app and 3036 for a development build, and `TERMINAL_API_PORT` overrides both. Where the CLI exists, `termdock hostinfo --json` reports it as `services.terminalApi.port`.
 
 ## Request
 

@@ -21,7 +21,7 @@ No token or URL is needed on the machine running Termdock: the CLI mints a local
 | Code | Meaning |
 |---|---|
 | `0` | Delivered |
-| `64` | Bad usage (no message, `--session` or `--title` with no value) |
+| `64` | Bad usage (no message, `--session` or `--title` with no value), or the server rejected the input: message over 4000 characters or title outside 1–100 |
 | non-zero, other | Not delivered. The reason is on stderr |
 
 ## Why a send was rejected

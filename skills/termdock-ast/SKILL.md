@@ -2,7 +2,7 @@
 name: termdock-ast
 displayName: Termdock AST
 description: Queries AST index to find symbol locations, file dependencies, callers, and impact analysis. Use when user asks where is X, who calls X, what depends on X, or before refactoring. Skip when user provides exact file path.
-version: 1
+version: 2
 minAppVersion: 1.20.0
 ---
 
@@ -31,9 +31,10 @@ minAppVersion: 1.20.0
 
 ### Step 1: Get Workspace ID (Required First)
 ```bash
-curl -s 'http://localhost:3033/api/workspaces' | jq '.data.workspaces[0].id'
+root=$(git rev-parse --show-toplevel)
+curl -s 'http://localhost:3033/api/workspaces' | jq -r --arg r "$root" '.data.workspaces[] | select(.projectRoot == $r) | .id'
 ```
-Save this ID for all subsequent calls.
+The list is ordered by status and name, not by which project you are in, so pick the entry whose `projectRoot` is your project. Save that ID for all subsequent calls.
 
 ### Step 2: Choose Your Query Type
 
@@ -147,7 +148,7 @@ curl 'http://localhost:3033/api/impact?symbolId=<id>&depth=2&workspace=ws_xxx'
 |-------|-------|--------|
 | No workspace found | API not running | Start Termdock app |
 | Empty search results | Symbol not indexed | Try partial name or rebuild index |
-| 404 on symbolId | Stale ID after code change | Re-search to get new ID |
+| Empty callers / calls / impact | The symbolId may be stale after a code change; these endpoints return an empty success, not 404, for an unknown ID | Re-search to get a fresh ID before trusting an empty result |
 
 **Rebuild index after code changes:**
 ```bash

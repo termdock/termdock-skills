@@ -6,7 +6,7 @@ Base URL is `http://127.0.0.1:<port>`; get the port from `termdock hostinfo --js
 
 ```bash
 curl -s -H "Authorization: Bearer $TERMINAL_API_TOKEN" \
-  http://127.0.0.1:3036/api/terminal/sessions
+  "http://127.0.0.1:$PORT/api/terminal/sessions"   # PORT from services.terminalApi.port
 ```
 
 ## Terminal sessions
@@ -259,3 +259,14 @@ A loopback port is first-come-first-served, so anything minting a token by hand 
 Success is `{"success":true,"data":{...}}`. Failure is `{"success":false,"error":{"code":"...","message":"..."}}` with a non-2xx status. `401` means the token is missing or wrong.
 
 Full request and response shapes, including the settings that gate the API, are in `docs/ref/api/TERMINAL-API.md` in the Termdock repository.
+
+## Live Prompt library schedules (1.22.0)
+
+`PUT /api/terminal/sessions/:id/keepalive` accepts
+`{"rule":{"id":"review","enabled":true,"schedule":{"kind":"daily","time":"09:00"},"message":"","promptRef":{"slug":"review","scope":"project"}}}`.
+The reference is resolved again at each fire using the target workspace. Use
+`global` for a global entry; project references require a local target workspace.
+Do not combine nonempty `message` and `promptRef`, or schedule prompts containing
+variables. Deleted/unreadable/unsupported prompts skip the slot rather than
+falling back to stale text. Existing screen and typing interlocks still apply.
+The API also accepts `{"kind":"once","atMs":<future epoch milliseconds>}`.
