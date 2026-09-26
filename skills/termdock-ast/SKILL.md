@@ -34,7 +34,7 @@ minAppVersion: 1.20.0
 root=$(git rev-parse --show-toplevel)
 curl -s 'http://localhost:3033/api/workspaces' | jq -r --arg r "$root" '.data.workspaces[] | select(.projectRoot == $r) | .id'
 ```
-The list puts the app's active workspace first, which is not necessarily yours, so pick the entry whose `projectRoot` is your project. Save that ID for all subsequent calls.
+The list is ordered by status and name, not by which project you are in, so pick the entry whose `projectRoot` is your project. Save that ID for all subsequent calls.
 
 ### Step 2: Choose Your Query Type
 
