@@ -135,6 +135,8 @@ does not have, so restoring one would apply the layout and leave every pane
 unbound. `layout restore` rejects a slim file rather than doing that, but the
 fix is at capture time. File panes in a slim snapshot are now reported under
 `restored.skipped` with `contentType: "file"` instead of being silently dropped.
+Browser panes (`contentType: "browser"`) behave the same way; in a `--full`
+snapshot they restore like any other binding while that browser tab is still open.
 
 ```bash
 termdock layout get --full --json > /tmp/layout.json
