@@ -2,7 +2,7 @@
 name: termdock-terminal
 displayName: Termdock Terminal
 description: Drive Termdock terminals and notify existing AgentSessions from inside one. Open a session for a long job, read or send terminal input, arrange panes, schedule a wake-up, or send a structured external agent callback. Use when work would otherwise block your terminal, when you need another session's output, or when an external monitor needs to notify an agent without posing as a human.
-version: 24
+version: 25
 minAppVersion: 1.22.0
 ---
 
@@ -81,7 +81,7 @@ contract and delivery limits.
 
 **`--mode` decides what you get.** `text` is the scrollback as text, `screen` is what is on the visible screen right now, `raw` keeps ANSI. For "is it waiting at a prompt", use `screen`.
 
-**Background sessions have no visible pane.** That is the point, but `--mode screen` needs the pane; use `text`.
+**Background sessions have no visible pane.** `--mode screen` still works: it reads the session's headless screen, not the pane.
 
 ## Ports and identity
 
