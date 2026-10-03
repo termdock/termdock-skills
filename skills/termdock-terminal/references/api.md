@@ -68,6 +68,11 @@ that throws answers `500 TERMINAL_WRITE_FAILED`, still with `error.details.stage
 the submit key, answers
 `404 SESSION_NOT_FOUND` instead.
 
+While a remote peer holds a session it created on this machine, `/input`,
+`/submit`, `/keys` and `/interrupt` answer `409 SESSION_HELD_BY_PEER` and write
+nothing (`/input` keeps its `requestId`). Do not retry on a loop: the same
+request only succeeds after the session is taken over on this machine.
+
 A keep-alive rule is `{"rule":{"id","enabled","schedule","message"}}`, where
 `schedule` is `{"kind":"interval","intervalMs":n}`,
 `{"kind":"idle","thresholdMs":n}` or `{"kind":"daily","time":"HH:mm"}`. All
