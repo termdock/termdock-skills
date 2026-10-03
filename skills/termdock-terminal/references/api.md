@@ -117,6 +117,9 @@ The slim shape now carries an optional `contentType` field (#2150). A file pane
 (`contentType: "file"`) is reported under `restored.skipped` with
 `contentType: "file"` and `contentId` set to the pane id, instead of being
 silently dropped. Older clients that omit `contentType` continue to work.
+A browser pane (`contentType: "browser"`, `contentId` = the browser tab's id)
+follows the same rules: skipped as `SLIM_PANE` from a slim snapshot, restored
+from a full one while that tab is still open.
 
 ## Agent sessions
 
