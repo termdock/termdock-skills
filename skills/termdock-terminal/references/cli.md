@@ -50,7 +50,7 @@ registry write, so a reported name survives restart.
 | `--background` | Creates the session without giving it a visible pane |
 | `--name` | Names the tab. Use it: a name is what makes the session addressable later |
 | `--mode text` | Scrollback as plain text. The default choice for "what happened" |
-| `--mode screen` | What is on the visible screen right now. The choice for "is it waiting at a prompt". Needs a visible pane |
+| `--mode screen` | What is on the screen right now. The choice for "is it waiting at a prompt". Works without a visible pane (read from the headless screen) |
 | `--mode raw` | Keeps ANSI sequences |
 | `--since <cursor>` | Only what arrived after that cursor, from a previous read |
 | `--follow` | Streams instead of returning once |
