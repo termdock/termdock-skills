@@ -1,8 +1,10 @@
 # CLI reference
 
-`termdock` talks to the Terminal API over loopback and mints its own token there, so nothing needs configuring on the machine running Termdock. To point at another machine, put `--url <url>` and `--token <token>` before the subcommand: `termdock --url <url> --token <token> session list --json`.
+`termdock` talks to the Terminal API over loopback. Token resolution is explicit `--token`, then `TERMINAL_API_TOKEN` / `TERMDOCK_API_TOKEN`, otherwise verified-loopback cache/bootstrap provisioning. Without the local bootstrap secret it cannot verify or provision a cached token; supply one through env instead. `--url <url>` overrides the API URL, followed by `TERMDOCK_API_URL` / `TERMINAL_API_URL` / `TERMINAL_API_BASE`. Put global flags before the subcommand. A URL override does not make Termdock listen remotely; keep the server on loopback.
 
-Most subcommands require `--json` and print one JSON object. `notify` is the exception; `--json` is optional there.
+Most HTTP subcommands require `--json` and print the **unwrapped HTTP data**, not `{success,data}`. `session output --follow --json` prints event **NDJSON**; without `--json` it prints text. `notify` and local hook commands have optional JSON modes. Check stderr and exit code, not just whether stdout contains JSON.
+
+The custom MCP examples preserve raw HTTP envelopes, unlike this CLI. Neither this CLI nor a read tool name creates a restricted read-only token: service scopes are only `terminal` / `agent-session`, both covering writes. Built-in Code Graph MCP exposes eight AST/code tools, not these terminal commands.
 
 ## Identity and ports
 

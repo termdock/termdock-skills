@@ -31,7 +31,7 @@ curl -s -X POST -H "Authorization: Bearer $TERMINAL_API_TOKEN" \
 
 `error.code` is the stable field for callers. In particular, rejected notify input uses `INVALID_NOTIFY_MESSAGE`, not the terminal tool bridge's `INVALID_TOOL_INPUT`.
 
-**A 2xx is the only evidence the user saw anything.** Everything else means the message is still yours to deliver some other way.
+**A 2xx acknowledges provider delivery, not that the human read the message.** Everything else means delivery was not confirmed. CLI `--json` prints the unwrapped `data`; raw HTTP retains `{success,data}`.
 
 ## Token
 
