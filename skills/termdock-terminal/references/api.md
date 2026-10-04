@@ -2,7 +2,7 @@
 
 For callers that cannot run the CLI. The CLI is a thin wrapper over these.
 
-Base URL is `http://127.0.0.1:<port>`; get the port from `termdock hostinfo --json`. Every request needs `Authorization: Bearer <token>`.
+Base URL is `http://127.0.0.1:<port>`; get the port from `termdock hostinfo --json`. Terminal/session requests need `Authorization: Bearer <token>`. Service scopes are only `terminal` and `agent-session`; both allow writes and do not restrict workspace/session IDs. AST HTTP uses separate auth configuration.
 
 ```bash
 curl -s -H "Authorization: Bearer $TERMINAL_API_TOKEN" \
@@ -262,9 +262,11 @@ provider error still answers `500` and the stop cap `504`.
 
 A loopback port is first-come-first-served, so anything minting a token by hand should send `{"nonce":"<32+ hex chars>"}` to the challenge endpoint first and check that `data.proof` equals `HMAC-SHA256(bootstrapSecret, "<nonce>|<port>")` in hex, using the port it dialed. Any other outcome means do not send the secret. The `termdock` CLI already does this for you.
 
-## Envelope
+## Envelope and streams
 
 Success is `{"success":true,"data":{...}}`. Failure is `{"success":false,"error":{"code":"...","message":"..."}}` with a non-2xx status. `401` means the token is missing or wrong.
+
+The CLI prints the unwrapped `data`, not this envelope. `session output --follow --json` converts SSE into event NDJSON. Custom MCP examples retain the raw envelope in text content and map errors to `isError`; built-in Code Graph MCP is a separate eight-tool AST/code surface. HTTP SSE and webhooks do not imply MCP Events support.
 
 Full request and response shapes, including the settings that gate the API, are in `docs/ref/api/TERMINAL-API.md` in the Termdock repository.
 

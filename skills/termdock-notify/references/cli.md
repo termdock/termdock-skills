@@ -16,7 +16,7 @@ No token or URL is needed on the machine running Termdock: the CLI mints a local
 
 ## Exit codes
 
-`0` means the user got it. Anything else means they did not.
+`0` acknowledges provider delivery, not that the user read it. Anything else means delivery was not confirmed. `--json` prints unwrapped HTTP data, while API errors are on stderr.
 
 | Code | Meaning |
 |---|---|
