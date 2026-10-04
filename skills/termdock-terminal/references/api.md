@@ -35,6 +35,24 @@ curl -s -H "Authorization: Bearer $TERMINAL_API_TOKEN" \
 `sessionIds`, the `assign` body's `sessionId`, and the `contentId` of each
 `terminal` pane in a restore snapshot.
 
+### Exact workspace reads (1.23.0)
+
+`GET /sessions/:id/status` and `GET /sessions/:id/output?mode=text` accept
+`x-termdock-workspace-id: <expected-workspace-id>`. With this header, both HTTP
+and Tool Runtime bypass name resolution and check the live exact ID, workspace
+ownership, workspace existence and online state in the existing service at read
+time. Success adds `workspaceId` to `data.session` (status) or `data` (output).
+Missing/moved IDs or deleted workspaces return 404, offline sessions return 409,
+and output modes other than text or `waitForChange` return 400. Without the
+header, existing name-addressing behavior is unchanged. This guard is not an
+authorization grant and does not narrow the underlying token's scopes.
+
+For the four-tool supplied-token-only adapter, use the separate executable
+`termdock-readonly-mcp --config <file>`, not the CLI subprocess. Setup, strict
+allowlists, bounded cursors, error codes and supported versions are documented
+in `docs/ref/api/READONLY-MCP.md`. Its sole token source is the dedicated
+`TERMDOCK_MCP_TOKEN` setup variable; it never provisions or reads the CLI cache.
+
 Name resolution: an id wins over a name; a name matching several sessions is not
 guessed at, it comes back as `SESSION_NOT_FOUND` with the closest candidate names.
 `SESSION_RESOLVE_FAILED` is a different failure, the resolution step itself broke
