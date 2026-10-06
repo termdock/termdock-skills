@@ -298,3 +298,13 @@ Do not combine nonempty `message` and `promptRef`, or schedule prompts containin
 variables. Deleted/unreadable/unsupported prompts skip the slot rather than
 falling back to stale text. Existing screen and typing interlocks still apply.
 The API also accepts `{"kind":"once","atMs":<future epoch milliseconds>}`.
+
+## Persistent sessions (`persistent-term-*`)
+
+Broker-owned sessions keep running after the App quits. The existing input, submit, key, interrupt, output and destroy commands and HTTP routes accept their IDs.
+
+- Writing needs this App's writer lease from Tool Runtime `terminal:attach`. Without it a write returns 409 `STALE_ATTACHMENT`; nothing attaches or takes over implicitly, and rejected input is not retried.
+- Output is a bounded snapshot: `raw` is serialized ANSI, `text`/`content`/`screen` come from a headless screen. Poll with `ifHash`. Line cursors are only meaningful within one snapshot; `snapshotCursor` is the broker's source cursor.
+- Not available for persistent IDs: `--since`, `--follow`/SSE, DOM reads, `--queue-until-ready`. `session attach` streams output but does not take the writer lease.
+- Create, attach and detach go through Tool Runtime (`terminal:create` with `persistence: "broker"`). `name`, `paneId` and `stealFocus` are rejected on persistent create.
+- App quit only detaches persistent sessions; `destroy` terminates the process tree and waits for it to be reaped. App and persistent sessions share one local limit of 10; over it, create fails with `RESOURCE_LIMIT` (409 over HTTP). Read-only `terminal:quit-summary` reports both counts, with `null` when the broker count is unknown.
