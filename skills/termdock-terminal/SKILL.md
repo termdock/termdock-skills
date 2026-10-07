@@ -2,13 +2,15 @@
 name: termdock-terminal
 displayName: Termdock Terminal
 description: Drive Termdock terminals and notify existing AgentSessions from inside one. Open a session for a long job, read or send terminal input, arrange panes, schedule a wake-up, or send a structured external agent callback. Use when work would otherwise block your terminal, when you need another session's output, or when an external monitor needs to notify an agent without posing as a human.
-version: 33
+version: 34
 minAppVersion: 1.23.0
 ---
 
 # Drive Termdock From Inside A Terminal
 
 You are running in a Termdock terminal. `$TERMDOCK_SESSION_ID` is your own session.
+
+Local terminals use the broker automatically when it can honor the launch options; no persistent mode or special UI entry is needed. Closing a tab terminates its shell and children. App Quit or renderer refresh keeps broker-owned processes running, and startup reconnects living processes in the saved layout. `persistence` is an API ownership override, not a user-facing terminal kind.
 
 The `termdock` CLI is opt-in: the user installs it from the app, so check `$TERMDOCK_CLI_INSTALLED` before leaning on it. `1` means the CLI is on PATH and already authenticated for this machine: it mints a local token against loopback by itself. `0` means the app did not install its own shim, but a `termdock` from elsewhere may still exist: run `command -v termdock` first and use it if present. Only when the command is missing is there no workaround from inside the session (the HTTP API needs a bearer token and only the CLI mints one). Then ask the user to open **Settings -> Skills -> Command Line Tool** and press **Install**, then confirm with `command -v termdock` and continue; if the command is still missing, have them open a new session.
 
