@@ -37,8 +37,8 @@ Persistent writer handoff uses the same entry, not a new dedicated route. Read t
 | `GET` | `/api/terminal/sessions` | List. `?workspaceId=` filters |
 | `PATCH` | `/api/terminal/sessions/:id` | Rename. Body is `{ "name": "..." }`; returns the applied `{ "sessionId", "name" }` |
 | `GET` | `/api/terminal/sessions/:id/status` | Activity, whether it is waiting at a prompt |
-| `GET` | `/api/terminal/sessions/:id/output` | Read. `?mode=raw\|text\|content\|screen`, `?lines=`, `?since=` |
-| `GET` | `/api/terminal/sessions/:id/events` | Same content as an SSE stream |
+| `GET` | `/api/terminal/sessions/:id/output` | Read. `?mode=raw\|text\|content\|screen`, `?lines=`, `?since=` (`since` is App-owned only; broker-owned `persistent-term-*` returns 409 `CAPABILITY_UNAVAILABLE`, poll with `ifHash`) |
+| `GET` | `/api/terminal/sessions/:id/events` | Same content as an SSE stream. App-owned only; broker-owned `persistent-term-*` returns 409 `CAPABILITY_UNAVAILABLE` |
 | `GET` | `/api/terminal/sessions/:id/log` | The persisted session log on disk |
 | `GET` | `/api/terminal/sessions/:id/ports` | Ports the processes in that session are listening on |
 | `POST` | `/api/terminal/sessions/:id/input` | Write to the PTY. `data`, `appendEnter`, `submitKey` |

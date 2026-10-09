@@ -48,7 +48,7 @@ termdock session create --workspace <id> [--name <name>] [--background] --json
 termdock session list [--workspace <id>] --json
 termdock session rename <id> <name> --json
 termdock session output <id> [--mode raw|text|content|screen] [--lines <n>] [--since <cursor>] --json
-termdock session output <id> [--mode raw|text|content] [--lines <n>] [--since <cursor>] --follow [--json]
+termdock session output <id> [--mode raw|text|content] [--lines <n>] [--since <cursor>] --follow [--json]   # App-owned sessions only
 termdock session input <id> <text> [--enter] --json
 termdock session submit <id> <text> [--settle-ms <n>] [--queue-until-ready] [--ready-timeout <ms>] --json
 termdock session key <id> <key> --json
@@ -74,8 +74,8 @@ registry write, so a reported name survives restart.
 | `--mode text` | Scrollback as plain text. The default choice for "what happened" |
 | `--mode screen` | What is on the screen right now. The choice for "is it waiting at a prompt". Works without a visible pane (read from the headless screen) |
 | `--mode raw` | Keeps ANSI sequences |
-| `--since <cursor>` | Only what arrived after that cursor, from a previous read |
-| `--follow` | Streams instead of returning once |
+| `--since <cursor>` | Only what arrived after that cursor, from a previous read. Not for broker-owned `persistent-term-*` sessions (409 `CAPABILITY_UNAVAILABLE`) |
+| `--follow` | Streams instead of returning once. Not for broker-owned `persistent-term-*` sessions (409 `CAPABILITY_UNAVAILABLE`); poll a snapshot instead |
 | `--enter` | Submits the line. Without it the text sits at the prompt unsent |
 
 `session attach` takes over the terminal you run it in. Leave it to a human.
