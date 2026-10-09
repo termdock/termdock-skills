@@ -9,6 +9,25 @@ curl -s -H "Authorization: Bearer $TERMINAL_API_TOKEN" \
   "http://127.0.0.1:$PORT/api/terminal/sessions"   # PORT from services.terminalApi.port
 ```
 
+## Generic Tool Runtime entry
+
+`GET /api/tools` lists the registered tools using the same discovery as renderer `tool:discover`. Data is an array of `{name,category,isReadOnly,isConcurrencySafe,isAvailable}`. Discovery includes unavailable tools and caller-dependent tools; it is not an external-call whitelist or a guarantee that a call will succeed.
+
+`POST /api/tools/:name` calls that tool directly. URL-encode the tool name; the JSON body is the tool input itself, not `{name,input}`. Optional query parameters `workspaceId`, `workspacePath`, and `sessionId` supply ToolContext separately. Omitted `workspacePath` is `""`. Input fields are not copied into context. Context uses `invocationOrigin:"http"` and has no window `caller`; workspace routing, root claims, validation and permissions remain the tool/registry's responsibility. For remote workspace calls, supply context `workspaceId`; an input `workspaceId` alone is not routing context. Peer/SSH capabilities and offline failures remain governed by Tool Runtime, with no local fallback added here.
+
+Both endpoints use the existing Terminal API bearer-token validation and enabled gate. The generic path does not add per-tool scope checks: any valid Terminal API token can reach the registry, and the tool decides whether the operation is allowed. Do not treat a token's existing `terminal` / `agent-session` scope as a restriction on this generic surface. Keep it on loopback; never expose it through the webhook tunnel.
+
+Responses use the existing HTTP ToolResult conversion: `{success:true,data}` or `{success:false,error:{code,message}}`. Known terminal errors, including a recognized `errorCode` from the registry or tool, retain their HTTP status; validation errors return `400 INVALID_TOOL_INPUT`; an unknown tool name returns `404 TOOL_NOT_FOUND`. Errors without a recognized terminal code return `500 TOOL_CALL_FAILED`, preserving the registry/tool error message. An unavailable registry returns `503 TOOL_RUNTIME_UNAVAILABLE`. The existing 1 MiB request-body limit applies. There is no new input/result adaptation or tool-specific authorization in this route. Tools requiring a renderer caller, such as `peer:host-terminal-view-intents`, return their own rejection. Calls are unary, not event subscriptions; the generic endpoint does not provide renderer cancellation/progress channels.
+
+```bash
+curl -s -H "Authorization: Bearer $TERMINAL_API_TOKEN" \
+  "http://127.0.0.1:$PORT/api/tools"
+curl -s -H "Authorization: Bearer $TERMINAL_API_TOKEN" -H 'Content-Type: application/json' \
+  -d '{}' "http://127.0.0.1:$PORT/api/tools/terminal%3Alist"
+```
+
+Persistent writer handoff uses the same entry, not a new dedicated route. Read the session's current generation first. `terminal:attach` input is `{sessionId,expectedGeneration,mode:"takeover"}` (or `"if-unowned"`); retain its returned `writer:{attachmentId,generation}`. Then call `terminal:resize {sessionId,cols,rows}` and `terminal:detach {sessionId,writer}`. Takeover revokes the previous writer. Detach preserves the process; later I/O may acquire an unowned writer through the existing tool logic, so detach is not a permanent write prohibition. `terminal:quit-summary {}` reports quit counts. CLI `session attach` remains the old SSE/stdin bridge and does not grant a broker writer. Do not blindly retry uncertain mutations.
+
 ## Terminal sessions
 
 | Method | Path | Purpose |
