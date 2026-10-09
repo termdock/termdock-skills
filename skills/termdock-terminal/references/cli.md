@@ -33,7 +33,7 @@ Omitted input defaults to `{}`; `--input` and `--input-file` are mutually exclus
 
 `tool` always prints unwrapped JSON data, with or without `--json`. It uses the same token resolution, HTTP transport and 1 MiB byte limit as existing commands. Bad options/JSON or HTTP 4xx exit `64`; unreadable input files exit `74`; transport/HTTP 5xx exit `69`. Tool errors go to stderr. `--list` reports registered metadata, including unavailable/caller-dependent tools, not a whitelist.
 
-Context flags become HTTP query parameters, never tool input or window identity. For remote routing use `--workspace-id`; input `workspaceId` alone is not context. Tool Runtime applies its existing checks; caller-dependent tools can refuse HTTP calls. Any valid Terminal API token reaches this generic surface, without additional per-tool scope restrictions. Keep the API on loopback. See `api.md` for the shared response/error behavior.
+Context flags become HTTP query parameters, never tool input or window identity. For remote routing use `--workspace-id`; input `workspaceId` alone is not context. Tool Runtime applies its existing checks; caller-dependent tools can refuse HTTP calls. A service token needs both `terminal` and `agent-session` scopes for this generic surface (a token with only one gets `403 FORBIDDEN_SCOPE`); the CLI's own token has both, and there are no further per-tool scope restrictions. Keep the API on loopback. See `api.md` for the shared response/error behavior.
 
 ## Workspaces
 
