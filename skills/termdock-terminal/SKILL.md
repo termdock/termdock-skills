@@ -2,7 +2,7 @@
 name: termdock-terminal
 displayName: Termdock Terminal
 description: Drive Termdock terminals and notify existing AgentSessions from inside one. Open a session for a long job, read or send terminal input, arrange panes, schedule a wake-up, or send a structured external agent callback. Use when work would otherwise block your terminal, when you need another session's output, or when an external monitor needs to notify an agent without posing as a human.
-version: 35
+version: 36
 minAppVersion: 1.23.1
 ---
 
@@ -73,7 +73,7 @@ contract and delivery limits.
 - **Escaping your own session.** If the user asked you to do something here, do it here. Do not create a session to hide slow work.
 - **Talking to yourself.** Writing input to `$TERMDOCK_SESSION_ID` feeds your own PTY and will confuse the session you are in.
 - **Anything the user is watching.** Rearranging panes while they work is hostile. Change the layout when it serves the thing you were asked to do, then leave it.
-- **Polling in a tight loop.** `session output --follow` streams; use it instead of a `while true` around `session output`.
+- **Polling in a tight loop.** For App-owned sessions `session output --follow` streams; use it instead of a `while true` around `session output`. Local terminals are broker-owned by default (`persistent-term-*`) and only return snapshots, so `--follow` and `--since` fail there: read `session output --mode screen` at a modest interval instead.
 
 ## Things that will bite you
 
