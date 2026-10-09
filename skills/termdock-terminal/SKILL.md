@@ -73,7 +73,7 @@ contract and delivery limits.
 - **Escaping your own session.** If the user asked you to do something here, do it here. Do not create a session to hide slow work.
 - **Talking to yourself.** Writing input to `$TERMDOCK_SESSION_ID` feeds your own PTY and will confuse the session you are in.
 - **Anything the user is watching.** Rearranging panes while they work is hostile. Change the layout when it serves the thing you were asked to do, then leave it.
-- **Polling in a tight loop.** For App-owned sessions `session output --follow` streams; use it instead of a `while true` around `session output`. Local terminals are broker-owned by default (`persistent-term-*`) and only return snapshots, so `--follow` and `--since` fail there: read `session output --mode screen` at a modest interval instead.
+- **Polling in a tight loop.** `session output --follow` streams; use it instead of a `while true` around `session output`. Local terminals are broker-owned by default (`persistent-term-*`) and only return snapshots, so `--follow` and `--since` fail there: read `session output --mode screen` at a modest interval instead.
 
 ## Things that will bite you
 

@@ -47,8 +47,8 @@ termdock workspace list --json    # workspace ids, which is what session create 
 termdock session create --workspace <id> [--name <name>] [--background] --json
 termdock session list [--workspace <id>] --json
 termdock session rename <id> <name> --json
-termdock session output <id> [--mode raw|text|content|screen] [--lines <n>] [--since <cursor>] --json
-termdock session output <id> [--mode raw|text|content] [--lines <n>] [--since <cursor>] --follow [--json]   # App-owned sessions only
+termdock session output <id> [--mode raw|text|content|screen] [--lines <n>] [--since <cursor>] --json   # --since: not for broker-owned persistent-term-*
+termdock session output <id> [--mode raw|text|content] [--lines <n>] [--since <cursor>] --follow [--json]   # not for broker-owned persistent-term-*
 termdock session input <id> <text> [--enter] --json
 termdock session submit <id> <text> [--settle-ms <n>] [--queue-until-ready] [--ready-timeout <ms>] --json
 termdock session key <id> <key> --json
