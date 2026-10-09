@@ -15,6 +15,26 @@ termdock hostinfo --json    # host terminal + Terminal API and AST API ports, wo
 
 Ports are not fixed. Read them from `hostinfo`, never hardcode.
 
+## Generic tools
+
+```bash
+termdock tool --list [--json]
+termdock tool <name> [--input <json> | --input-file <path>] [--json]
+# Optional context, separate from the input JSON:
+# --workspace-id <id> --workspace-path <path> --session-id <id>
+termdock tool terminal:list
+termdock tool terminal:quit-summary --input '{}'
+termdock tool terminal:attach --input '{"sessionId":"persistent-term-...","expectedGeneration":1,"mode":"takeover"}'
+termdock tool terminal:resize --input '{"sessionId":"persistent-term-...","cols":100,"rows":30}'
+termdock tool terminal:detach --input-file detach.json
+```
+
+Omitted input defaults to `{}`; `--input` and `--input-file` are mutually exclusive. `detach.json` must contain `{ "sessionId": "persistent-term-...", "writer": { "attachmentId": "...", "generation": 2 } }`, using the writer returned by attach, not invented values. Read current generation before attaching; takeover revokes the old writer. Detach leaves the process running. This differs from the existing `session attach` SSE/stdin bridge.
+
+`tool` always prints unwrapped JSON data, with or without `--json`. It uses the same token resolution, HTTP transport and 1 MiB byte limit as existing commands. Bad options/JSON or HTTP 4xx exit `64`; unreadable input files exit `74`; transport/HTTP 5xx exit `69`. Tool errors go to stderr. `--list` reports registered metadata, including unavailable/caller-dependent tools, not a whitelist.
+
+Context flags become HTTP query parameters, never tool input or window identity. For remote routing use `--workspace-id`; input `workspaceId` alone is not context. Tool Runtime applies its existing checks; caller-dependent tools can refuse HTTP calls. Any valid Terminal API token reaches this generic surface, without additional per-tool scope restrictions. Keep the API on loopback. See `api.md` for the shared response/error behavior.
+
 ## Workspaces
 
 ```bash
