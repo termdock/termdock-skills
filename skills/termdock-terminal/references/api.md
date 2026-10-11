@@ -38,6 +38,7 @@ Persistent writer handoff uses the same entry, not a new dedicated route. Read t
 | `PATCH` | `/api/terminal/sessions/:id` | Rename. Body is `{ "name": "..." }`; returns the applied `{ "sessionId", "name" }` |
 | `GET` | `/api/terminal/sessions/:id/status` | Activity, whether it is waiting at a prompt |
 | `GET` | `/api/terminal/sessions/:id/output` | Read. `?mode=raw\|text\|content\|screen`, `?lines=`, `?since=` (App-style line cursor, including broker-owned `persistent-term-*`; inspect `truncated`) |
+| `POST` | `/api/terminal/sessions/:id/wait` | Current-screen text/gone/regex condition; same service as read-only `terminal:wait-condition` |
 | `GET` | `/api/terminal/sessions/:id/events` | Same content as an SSE stream, including broker-owned `persistent-term-*` attached to this Main; `output.error` ends lost/ended attachments |
 | `GET` | `/api/terminal/sessions/:id/log` | The persisted session log on disk |
 | `GET` | `/api/terminal/sessions/:id/ports` | Ports the processes in that session are listening on |
@@ -329,3 +330,44 @@ The API also accepts `{"kind":"once","atMs":<future epoch milliseconds>}`.
 - Closing a desktop tab or `session destroy` terminates its shell and children and waits for process-tree acknowledgement. A `lost` session (its broker instance is gone) cannot be terminated; destroy only forgets it locally and returns `treeReaped:false, forgotten:true`. Quit/Cmd+R and explicit `terminal:detach` do not terminate them. There is no session-count cap. The broker warns at 192 MiB RSS and refuses new creation at 256 MiB (`RESOURCE_LIMIT`), without terminating existing work. PTY/process exhaustion returns `RESOURCE_LIMIT` with a readable recovery hint from a v1.1 broker; other spawn failures return `CAPABILITY_UNAVAILABLE`.
 - Startup uses the one savedSessions/layout: living processes reconnect in their original pane/order; confirmed ended/missing processes rebuild with a NEW ID, saved history and keep-alive rules. Unreachable/incompatible broker panes stay in place for retry; other writers remain read-only until confirmed takeover. Manual `terminal:restore-persistent {sessionId}` is Tool Runtime only (no HTTP/CLI route), returns `{snapshot, broker, session?, errorCode?}` and does not accept caller cwd/shell or replay uncertain create. Existing App-owned snapshots retain snapshot-only restore.
 - Read-only `terminal:quit-summary {}` returns App-ending/background-running counts; a broker count of `null` is unknown, not zero. Broker mutations are never automatically retried. `name` is broker-held metadata; `paneId`/`stealFocus` use ordinary desktop placement, and `background:true` cannot be combined with placement.
+
+### Wait for a current-screen condition
+
+`POST /api/terminal/sessions/:id/wait` calls the read-only Tool Runtime tool `terminal:wait-condition`. The path target is resolved once; the service keeps that exact session, workspace, generation and attachment for the entire request. Other tools, including list and interrupt, remain available while a wait is pending. Existing `/output` and `/events` contracts are unchanged.
+
+```json
+{
+  "condition": {"kind":"text", "value":"中文\ndone"},
+  "timeoutMs": 30000,
+  "workspaceId": "expected-workspace-id",
+  "authority": "app"
+}
+```
+
+The tool takes the same fields plus `sessionId`. `workspaceId` and `authority` are optional expected identity checks, not permission grants. App authority is `app`; broker authority is `broker:<attachmentId>` (or `broker:detached` for a detached snapshot).
+
+- `text`: a case-sensitive literal substring in the current screen. Regex metacharacters are literal.
+- `gone`: that literal is absent from the current screen. Initial absence succeeds, even if scrollback/history contains it. It does not mean history was deleted.
+- `regex`: a Unicode pattern against the same screen. `u` is implicit; optional `flags` may contain `i` and/or `m` once each. Other flags, or flags on literal conditions, are rejected. Empty values are rejected for all kinds.
+- `timeoutMs`: default 30000, maximum 120000; finite nonnegative numbers only, with no clamping. `0` checks once, including an initial screen read and bounded regex evaluation; it does not subscribe for future matches.
+- The complete current screen is joined with newlines, using headless first and valid renderer fallback. Matching never reads history or truncates the screen. Limits: 16 waiters per session, 128 globally, 1024 UTF-8 bytes per value and a 256 KiB complete screen window.
+- Regex compilation and execution run only in abortable workers, at most two execution units and 50 ms per evaluation. Startup and queue time count toward the request deadline. Worker failure never falls back to Main.
+- Peer/SSH backends without this screen lease capability return `CAPABILITY_UNAVAILABLE`, without local IO. Broker snapshots are readable without acquiring a writer; a nonmatching continuous wait requires this Main's live attachment, otherwise it returns `CAPABILITY_UNAVAILABLE`.
+
+```json
+{"success":true,"data":{"sessionId":"zsh-example","kind":"text","matched":true,"timedOut":false,"observation":{"source":"headless","generation":"app:1","snapshotVersion":1}}}
+```
+
+Success means only the condition matched, not that a task completed. A normal deadline returns `matched:false,timedOut:true`; `observation` is the last evaluated snapshot, or `null` if none completed. Initial screen unavailability/failure is an error, never a successful `gone` result. Disconnect, cancellation, token/root authority revocation, session exit/rebuild and attachment changes clean up waiters and workers. HTTP token revocation is checked every 100 ms and again before sending a response; Tool root claims are audited on the same interval without polling screens.
+
+Stable errors use the shared terminal error table: `INVALID_TOOL_INPUT` (400), `FRAME_TOO_LARGE` (413), `SNAPSHOT_TOO_LARGE` (422), `RESOURCE_LIMIT` (409), `SCREEN_READ_UNAVAILABLE` (503), `SCREEN_READ_FAILED` (422), `INVALID_REGEX` (400), `UNSUPPORTED_REGEX_FLAGS` (400), `REGEX_TIMEOUT` (422), `REGEX_WORKER_UNAVAILABLE` (503), `CANCELLED` (409), `AUTHORITY_REVOKED` (403), `WORKSPACE_DENIED` (403), `TARGET_CHANGED` (409), `SESSION_ENDED` (409), `BROKER_UNREACHABLE` (503), and `CAPABILITY_UNAVAILABLE` (409).
+
+CLI:
+
+```bash
+termdock session wait shell --text 'done' --timeout 30000 --json
+termdock session wait shell --gone 'working' --timeout 0 --json
+termdock session wait shell --regex '^中文.*done$' --flags im --workspace ws --authority app --json
+```
+
+Use exactly one of `--text`, `--gone` and `--regex`. CLI output is unwrapped data; errors include the stable code on stderr and retain the existing 4xx exit 64 / transport-or-5xx exit 69 convention.
