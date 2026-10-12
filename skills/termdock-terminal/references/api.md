@@ -9,6 +9,40 @@ curl -s -H "Authorization: Bearer $TERMINAL_API_TOKEN" \
   "http://127.0.0.1:$PORT/api/terminal/sessions"   # PORT from services.terminalApi.port
 ```
 
+## Safe dispatch queue (v1.24.0)
+
+Dispatch tools are `terminal:dispatch-enqueue`, `terminal:dispatch-list`, `terminal:dispatch-get`, `terminal:dispatch-edit`, `terminal:dispatch-cancel`, and `terminal:dispatch-wait`. HTTP and CLI call the same Tool Runtime tools and Main-owned ledger. Every call requires a local workspace selector: `?workspaceId=<id>` or `x-termdock-workspace-id: <id>` (the header takes precedence), plus a bearer token with `terminal` scope. The selector is not authority; the owner rechecks the workspace, exact session incarnation and writer attachment. Generic `/api/tools` calls still require both existing scopes. Renderer calls use `toolAPI`, not a separate dispatch IPC channel.
+
+| Method | Endpoint | Input |
+| --- | --- | --- |
+| POST | `/api/terminal/dispatches` | `{target,requestKey,payload,queueTimeoutMs}` |
+| GET | `/api/terminal/dispatches` | Optional `sessionId` query, exact ID only |
+| GET | `/api/terminal/dispatches/:appInstanceId/:dispatchId` | Complete handle in the path |
+| PATCH | `/api/terminal/dispatches/:appInstanceId/:dispatchId` | `{expectedVersion,payload}` |
+| POST | `/api/terminal/dispatches/:appInstanceId/:dispatchId/cancel` | Empty body |
+| POST | `/api/terminal/dispatches/:appInstanceId/:dispatchId/wait` | `{waitTimeoutMs}` |
+
+Enqueue returns `{accepted:true,dispatch:record}` inside the normal `{success,data}` envelope. List returns metadata records; authorized get adds `payload` only while queued. Edit and cancel return the current record. Records include `handle`, exact `binding`, trusted `source`, `version`, `state`, `blockReason`, queue deadline and timestamps. Edits preserve FIFO order. The same request key and payload from the same authenticated source return the same dispatch; a changed payload conflicts. A supplied source or caller identity is rejected.
+
+`accepted` means admission only. `submitted` means the Enter write was confirmed, not that the agent started or the task succeeded. `outcome` is `unknown`; existing provider `subtype: "success"` is not task-success evidence. Next-item readiness uses the verified signal classifier, not idle screen status: permission, password, question and selection prompts and unsubmitted human input never open the queue. Each message is independent; no Ctrl+C or auto-approval is added.
+
+Only modes marked supported by `resolveDispatchSignalSupport()` auto-send: local macOS App-owned claude/codex with transcript facts and a readable headless composer. Missing facts or unverified providers, broker ownership, Linux/Windows and remote modes do not acquire a writer. Unsupported admitted modes remain `queued` with `blockReason: "unsupported-signal"`, then expire; peer/SSH admission without local authority returns `CAPABILITY_UNAVAILABLE`, never local fallback. Initial transcript resolution may be unavailable until a human first turn creates the source. A completed turn without a fresh composer observation does not release the next item.
+
+Queue timeout is required, 1–86,400,000 ms. Limits remain the shared dispatch defaults: 32 queued/session, 256 queued/App, 64 KiB UTF-8/payload, 4 MiB unsent payload, 1024 records, ended records retained at most 24 hours. Queue timeout never kills submitted work. Cancel only guarantees cancellation before `dispatching`; it does not interrupt the terminal. Cancelling a change observer does not cancel the dispatch.
+
+`REQUEST_CONFLICT` / `TOO_LATE` are 409. `DISPATCH_INSTANCE_EXPIRED` is 410 after App restart; a removed handle in the same instance is `DISPATCH_NOT_FOUND` / 404. Neither allows replay. Authority or generation changes retain the existing 403/409 errors. A failed pre-write runner attempt records `failure:{code,phase,sideEffect:"none"}`. Text possibly written but Enter unconfirmed records `state:"unknown"`, `outcome:"unknown"`, `failure.sideEffect:"possible"`; it is never replayed and blocks further automatic writes under that binding. The Main ledger is memory-only and normal shutdown releases queued payloads and observers; broker processes continuing after Quit do not continue this queue. Old direct input/submit, keep-alive and workflow policies are unchanged.
+
+### Foreground wait and background handles
+
+`terminal:dispatch-wait` is a read tool taking `{handle,waitTimeoutMs}` and the caller's cancellation signal, never a prompt. HTTP: `POST /api/terminal/dispatches/:appInstanceId/:dispatchId/wait` with `{waitTimeoutMs}`. The budget is required, integer 0–120000 ms; 0 is an immediate metadata query. Response data is the dispatch metadata (including the same `handle`, `version`, `state`, `outcome`, `evidence` and `blockReason`) plus `waitOutcome`: `state-reached`, `budget-exhausted`, or `cancelled`. No queued payload is returned by wait.
+
+Waiting ends at `waiting-human`, `unknown`, or a terminal state. Queued/submitted/running remain unchanged when the budget is exhausted. A cancelled waiter, disconnected HTTP client or exited CLI never cancels, interrupts, hides or resubmits the dispatch. Re-query the same handle with get/wait; reconnect does not replay events. Unsupported admitted modes stay queued with their existing block reason; wait does not promote provider/ownership support.
+
+The same Main owner observes versions using subscribe-then-read. Event identity is `(dispatchId,version)` within this App, deduplicated per active subscription. Each consumer holds at most one latest pending snapshot and one in-flight delivery; a stalled consumer closes after 5000 ms. Authorization is rechecked immediately before delivery. Limits are injectable engineering defaults: 8 observers/dispatch, 256/App; excess is `RESOURCE_LIMIT` / 409. Disconnect, unsubscribe and shutdown release observers and timers. There is no durable event bus or network exactly-once guarantee. No renderer IPC state event was added: the dispatch list retains its visibility-aware 3-second polling, and provides explicit re-query and cancellable foreground wait/Move to background through Tool Runtime.
+
+Completion is accepted only with this dispatch's submission baseline, session generation and verified provider turn evidence. A completed turn is not evidence the user's goal succeeded: outcome remains unknown. Recording is bounded to 512 observations/session and the ledger's record budget. Completion tracking lasts at most 24 hours after submission (injectable in the runner); expiry releases its recorder/listeners/timer, records `unknown` with `failure.code: "DISPATCH_TRACKING_EXPIRED"`, and never stops the terminal. Natural exit before verified completion is unknown; verified completion is preserved. D1 handle retention, 410 on App restart and 404 on record removal remain unchanged.
+
+
 ## Generic Tool Runtime entry
 
 `GET /api/tools` lists the registered tools using the same discovery as renderer `tool:discover`. Data is an array of `{name,category,isReadOnly,isConcurrencySafe,isAvailable}`. Discovery includes unavailable tools and caller-dependent tools; it is not an external-call whitelist or a guarantee that a call will succeed.
@@ -38,6 +72,7 @@ Persistent writer handoff uses the same entry, not a new dedicated route. Read t
 | `PATCH` | `/api/terminal/sessions/:id` | Rename. Body is `{ "name": "..." }`; returns the applied `{ "sessionId", "name" }` |
 | `GET` | `/api/terminal/sessions/:id/status` | Activity, whether it is waiting at a prompt |
 | `GET` | `/api/terminal/sessions/:id/output` | Read. `?mode=raw\|text\|content\|screen`, `?lines=`, `?since=` (App-style line cursor, including broker-owned `persistent-term-*`; inspect `truncated`) |
+| `POST` | `/api/terminal/sessions/:id/wait` | Current-screen text/gone/regex condition; same service as read-only `terminal:wait-condition` |
 | `GET` | `/api/terminal/sessions/:id/events` | Same content as an SSE stream, including broker-owned `persistent-term-*` attached to this Main; `output.error` ends lost/ended attachments |
 | `GET` | `/api/terminal/sessions/:id/log` | The persisted session log on disk |
 | `GET` | `/api/terminal/sessions/:id/ports` | Ports the processes in that session are listening on |
@@ -329,3 +364,44 @@ The API also accepts `{"kind":"once","atMs":<future epoch milliseconds>}`.
 - Closing a desktop tab or `session destroy` terminates its shell and children and waits for process-tree acknowledgement. A `lost` session (its broker instance is gone) cannot be terminated; destroy only forgets it locally and returns `treeReaped:false, forgotten:true`. Quit/Cmd+R and explicit `terminal:detach` do not terminate them. There is no session-count cap. The broker warns at 192 MiB RSS and refuses new creation at 256 MiB (`RESOURCE_LIMIT`), without terminating existing work. PTY/process exhaustion returns `RESOURCE_LIMIT` with a readable recovery hint from a v1.1 broker; other spawn failures return `CAPABILITY_UNAVAILABLE`.
 - Startup uses the one savedSessions/layout: living processes reconnect in their original pane/order; confirmed ended/missing processes rebuild with a NEW ID, saved history and keep-alive rules. Unreachable/incompatible broker panes stay in place for retry; other writers remain read-only until confirmed takeover. Manual `terminal:restore-persistent {sessionId}` is Tool Runtime only (no HTTP/CLI route), returns `{snapshot, broker, session?, errorCode?}` and does not accept caller cwd/shell or replay uncertain create. Existing App-owned snapshots retain snapshot-only restore.
 - Read-only `terminal:quit-summary {}` returns App-ending/background-running counts; a broker count of `null` is unknown, not zero. Broker mutations are never automatically retried. `name` is broker-held metadata; `paneId`/`stealFocus` use ordinary desktop placement, and `background:true` cannot be combined with placement.
+
+### Wait for a current-screen condition
+
+`POST /api/terminal/sessions/:id/wait` calls the read-only Tool Runtime tool `terminal:wait-condition`. The path target is resolved once; the service keeps that exact session, workspace, generation and attachment for the entire request. Other tools, including list and interrupt, remain available while a wait is pending. Existing `/output` and `/events` contracts are unchanged.
+
+```json
+{
+  "condition": {"kind":"text", "value":"中文\ndone"},
+  "timeoutMs": 30000,
+  "workspaceId": "expected-workspace-id",
+  "authority": "app"
+}
+```
+
+The tool takes the same fields plus `sessionId`. `workspaceId` and `authority` are optional expected identity checks, not permission grants. App authority is `app`; broker authority is `broker:<attachmentId>` (or `broker:detached` for a detached snapshot).
+
+- `text`: a case-sensitive literal substring in the current screen. Regex metacharacters are literal.
+- `gone`: that literal is absent from the current screen. Initial absence succeeds, even if scrollback/history contains it. It does not mean history was deleted.
+- `regex`: a Unicode pattern against the same screen. `u` is implicit; optional `flags` may contain `i` and/or `m` once each. Other flags, or flags on literal conditions, are rejected. Empty values are rejected for all kinds.
+- `timeoutMs`: default 30000, maximum 120000; finite nonnegative numbers only, with no clamping. `0` checks once, including an initial screen read and bounded regex evaluation; it does not subscribe for future matches.
+- The complete current screen is joined with newlines, using headless first and valid renderer fallback. Matching never reads history or truncates the screen. Limits: 16 waiters per session, 128 globally, 1024 UTF-8 bytes per value and a 256 KiB complete screen window.
+- Regex compilation and execution run only in abortable workers, at most two execution units and 50 ms per evaluation. Startup and queue time count toward the request deadline. Worker failure never falls back to Main.
+- Peer/SSH backends without this screen lease capability return `CAPABILITY_UNAVAILABLE`, without local IO. Broker snapshots are readable without acquiring a writer; a nonmatching continuous wait requires this Main's live attachment, otherwise it returns `CAPABILITY_UNAVAILABLE`.
+
+```json
+{"success":true,"data":{"sessionId":"zsh-example","kind":"text","matched":true,"timedOut":false,"observation":{"source":"headless","generation":"app:1","snapshotVersion":1}}}
+```
+
+Success means only the condition matched, not that a task completed. A normal deadline returns `matched:false,timedOut:true`; `observation` is the last evaluated snapshot, or `null` if none completed. Initial screen unavailability/failure is an error, never a successful `gone` result. Disconnect, cancellation, token/root authority revocation, session exit/rebuild and attachment changes clean up waiters and workers. HTTP token revocation is checked every 100 ms and again before sending a response; Tool root claims are audited on the same interval without polling screens.
+
+Stable errors use the shared terminal error table: `INVALID_TOOL_INPUT` (400), `FRAME_TOO_LARGE` (413), `SNAPSHOT_TOO_LARGE` (422), `RESOURCE_LIMIT` (409), `SCREEN_READ_UNAVAILABLE` (503), `SCREEN_READ_FAILED` (422), `INVALID_REGEX` (400), `UNSUPPORTED_REGEX_FLAGS` (400), `REGEX_TIMEOUT` (422), `REGEX_WORKER_UNAVAILABLE` (503), `CANCELLED` (409), `AUTHORITY_REVOKED` (403), `WORKSPACE_DENIED` (403), `TARGET_CHANGED` (409), `SESSION_ENDED` (409), `BROKER_UNREACHABLE` (503), and `CAPABILITY_UNAVAILABLE` (409).
+
+CLI:
+
+```bash
+termdock session wait shell --text 'done' --timeout 30000 --json
+termdock session wait shell --gone 'working' --timeout 0 --json
+termdock session wait shell --regex '^中文.*done$' --flags im --workspace ws --authority app --json
+```
+
+Use exactly one of `--text`, `--gone` and `--regex`. CLI output is unwrapped data; errors include the stable code on stderr and retain the existing 4xx exit 64 / transport-or-5xx exit 69 convention.

@@ -41,6 +41,21 @@ Context flags become HTTP query parameters, never tool input or window identity.
 termdock workspace list --json    # workspace ids, which is what session create takes
 ```
 
+## Safe dispatch queue
+
+```bash
+termdock dispatch enqueue <session-id-or-name> "next message" --workspace <id> --request-key <unique-key> --queue-timeout 60000 --json
+termdock dispatch list --workspace <id> [--session <exact-id>] --json
+termdock dispatch get <app-instance-id> <dispatch-id> --workspace <id> --json
+termdock dispatch wait <app-instance-id> <dispatch-id> --workspace <id> --wait-timeout 120000 --json
+termdock dispatch edit <app-instance-id> <dispatch-id> "edited message" --workspace <id> --expected-version <n> --json
+termdock dispatch cancel <app-instance-id> <dispatch-id> --workspace <id> --json
+```
+
+Keep both handle fields from enqueue; do not invent or reuse a handle after App restart. `--workspace` is required on every operation and becomes the HTTP workspace selector, not authority. `--request-key` and `--queue-timeout` are required for enqueue. Enqueue prints `{accepted:true,dispatch:record}`; the others print the tool data. Admission is not submission, running or task completion. Reuse the request key only for the same payload from the same authenticated source. Edit requires the current version and only works while queued; 409 means refresh before trying again. Cancel after `dispatching` returns `TOO_LATE` and does not interrupt the terminal.
+
+Check `blockReason` and `failure`. Unsupported signal modes stay queued with `unsupported-signal` until the deadline; do not send the prompt yourself as a fallback. Current auto-send support is local macOS App-owned claude/codex with verified transcript facts, a readable headless composer and no human input. Broker, unverified providers/platforms and remote paths are not promoted to supported. `unknown` with `failure.sideEffect:"possible"` means text/Enter may have reached the terminal: never replay it. `submitted` is only confirmed submission, and provider `subtype: "success"` still maps to dispatch outcome unknown. Use `dispatch wait` with an explicit integer `--wait-timeout` (0–120000 ms), no prompt. It prints the same handle and metadata plus `waitOutcome` (`state-reached`, `budget-exhausted`, `cancelled`). Waiting-human, unknown and terminal states end the foreground wait. Budget exhaustion preserves queued/blockReason or submitted/running; it is not completion or failure. Ctrl+C/CLI exit only detaches the HTTP waiter. Re-query with get or repeat wait, never enqueue again. Completed means this provider turn ended, not goal success. The UI supports Wait for turn, Move to background and Re-query dispatch. Completion tracking expires after 24 hours without stopping the terminal. See `api.md` for limits, restart errors, and authorization.
+
 ## Sessions
 
 ```bash
@@ -49,6 +64,7 @@ termdock session list [--workspace <id>] --json
 termdock session rename <id> <name> --json
 termdock session output <id> [--mode raw|text|content|screen] [--lines <n>] [--since <cursor>] --json
 termdock session output <id> [--mode raw|text|content] [--lines <n>] [--since <cursor>] --follow [--json]
+termdock session wait <id> --text|--gone|--regex <value> [--flags im] [--timeout <ms>] [--workspace <id>] [--authority <value>] --json
 termdock session input <id> <text> [--enter] --json
 termdock session submit <id> <text> [--settle-ms <n>] [--queue-until-ready] [--ready-timeout <ms>] --json
 termdock session key <id> <key> --json
@@ -213,3 +229,19 @@ text. See `api.md` for the reference payload and target-workspace rules.
 - Closing a desktop tab or `session destroy` terminates its shell and children and waits for process-tree acknowledgement. A `lost` session (its broker instance is gone) cannot be terminated; destroy only forgets it locally and returns `treeReaped:false, forgotten:true`. Quit/Cmd+R and explicit `terminal:detach` do not terminate them. There is no session-count cap. The broker warns at 192 MiB RSS and refuses new creation at 256 MiB (`RESOURCE_LIMIT`), without terminating existing work. PTY/process exhaustion returns `RESOURCE_LIMIT` with a readable recovery hint from a v1.1 broker; other spawn failures return `CAPABILITY_UNAVAILABLE`.
 - Startup uses the one savedSessions/layout: living processes reconnect in their original pane/order; confirmed ended/missing processes rebuild with a NEW ID, saved history and keep-alive rules. Unreachable/incompatible broker panes stay in place for retry; other writers remain read-only until confirmed takeover. Manual `terminal:restore-persistent {sessionId}` is Tool Runtime only (no HTTP/CLI route), returns `{snapshot, broker, session?, errorCode?}` and does not accept caller cwd/shell or replay uncertain create. Existing App-owned snapshots retain snapshot-only restore.
 - Read-only `terminal:quit-summary {}` returns App-ending/background-running counts; a broker count of `null` is unknown, not zero. Broker mutations are never automatically retried. `name` is broker-held metadata; `paneId`/`stealFocus` use ordinary desktop placement, and `background:true` cannot be combined with placement.
+
+## Current-screen condition waits (v1.24)
+
+```bash
+termdock session wait shell --text 'done' --json
+termdock session wait shell --gone 'working' --timeout 0 --json
+termdock session wait shell --regex '^中文.*done$' --flags im --timeout 30000 --json
+```
+
+Choose one condition flag. `text`/`gone` are case-sensitive literals, not regex; initial absence satisfies `gone`, regardless of old history. Regex uses implicit Unicode `u`, plus optional `i`/`m` once each. Empty values and other flags are rejected. This checks the complete current screen (headless first, renderer fallback), never history. A match is not task-completion evidence.
+
+`--timeout` defaults to 30000 ms, accepts finite nonnegative values up to 120000 without clamping, and `0` checks once. `--workspace` and `--authority` are optional expected identity checks, not authority grants. App authority is `app`; broker authority is `broker:<attachmentId>`. The name resolves once; exit, rebuild or attachment change cannot redirect an old wait to a replacement.
+
+The unwrapped result includes `sessionId`, `kind`, `matched`, `timedOut` and `observation` (`source`, `generation`, `snapshotVersion`, or null if no snapshot completed). Normal expiry returns `matched:false,timedOut:true`; cancellation/revocation/target change are errors. Limits are 16 waiters per session, 128 globally, 1024 UTF-8 value bytes and a 256 KiB full-screen matching window. Oversized/unavailable screens fail instead of producing a false `gone` match. Regex runs only in terminating workers (two units, 50 ms per evaluation, queue time included in the deadline).
+
+Peer/SSH without the screen lease capability returns `CAPABILITY_UNAVAILABLE`, without local fallback. Broker initial/one-shot snapshots do not acquire a writer; a nonmatching continuous wait requires this Main's attachment. Stable API error codes are printed on stderr, including `INVALID_REGEX`, `UNSUPPORTED_REGEX_FLAGS`, `REGEX_TIMEOUT`, `REGEX_WORKER_UNAVAILABLE`, `RESOURCE_LIMIT`, `SNAPSHOT_TOO_LARGE`, `SCREEN_READ_UNAVAILABLE`, `SCREEN_READ_FAILED`, `CANCELLED`, `AUTHORITY_REVOKED` and `TARGET_CHANGED`. HTTP 4xx exits 64; transport/5xx exits 69. See `api.md` for the complete request/error contract.
