@@ -41,6 +41,20 @@ Context flags become HTTP query parameters, never tool input or window identity.
 termdock workspace list --json    # workspace ids, which is what session create takes
 ```
 
+## Safe dispatch queue
+
+```bash
+termdock dispatch enqueue <session-id-or-name> "next message" --workspace <id> --request-key <unique-key> --queue-timeout 60000 --json
+termdock dispatch list --workspace <id> [--session <exact-id>] --json
+termdock dispatch get <app-instance-id> <dispatch-id> --workspace <id> --json
+termdock dispatch edit <app-instance-id> <dispatch-id> "edited message" --workspace <id> --expected-version <n> --json
+termdock dispatch cancel <app-instance-id> <dispatch-id> --workspace <id> --json
+```
+
+Keep both handle fields from enqueue; do not invent or reuse a handle after App restart. `--workspace` is required on every operation and becomes the HTTP workspace selector, not authority. `--request-key` and `--queue-timeout` are required for enqueue. Enqueue prints `{accepted:true,dispatch:record}`; the others print the tool data. Admission is not submission, running or task completion. Reuse the request key only for the same payload from the same authenticated source. Edit requires the current version and only works while queued; 409 means refresh before trying again. Cancel after `dispatching` returns `TOO_LATE` and does not interrupt the terminal.
+
+Check `blockReason` and `failure`. Unsupported signal modes stay queued with `unsupported-signal` until the deadline; do not send the prompt yourself as a fallback. Current auto-send support is local macOS App-owned claude/codex with verified transcript facts, a readable headless composer and no human input. Broker, unverified providers/platforms and remote paths are not promoted to supported. `unknown` with `failure.sideEffect:"possible"` means text/Enter may have reached the terminal: never replay it. `submitted` is only confirmed submission, and provider `subtype: "success"` still maps to dispatch outcome unknown. Completion/foreground waiting and the dispatch list UI are separate work. See `api.md` for limits, restart errors, and authorization.
+
 ## Sessions
 
 ```bash

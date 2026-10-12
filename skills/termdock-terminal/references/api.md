@@ -9,6 +9,28 @@ curl -s -H "Authorization: Bearer $TERMINAL_API_TOKEN" \
   "http://127.0.0.1:$PORT/api/terminal/sessions"   # PORT from services.terminalApi.port
 ```
 
+## Safe dispatch queue (v1.24.0)
+
+Dispatch tools are `terminal:dispatch-enqueue`, `terminal:dispatch-list`, `terminal:dispatch-get`, `terminal:dispatch-edit`, and `terminal:dispatch-cancel`. HTTP and CLI call the same Tool Runtime tools and Main-owned ledger. Every call requires a local workspace selector: `?workspaceId=<id>` or `x-termdock-workspace-id: <id>` (the header takes precedence), plus a bearer token with `terminal` scope. The selector is not authority; the owner rechecks the workspace, exact session incarnation and writer attachment. Generic `/api/tools` calls still require both existing scopes. Renderer calls use `toolAPI`, not a separate dispatch IPC channel.
+
+| Method | Endpoint | Input |
+| --- | --- | --- |
+| POST | `/api/terminal/dispatches` | `{target,requestKey,payload,queueTimeoutMs}` |
+| GET | `/api/terminal/dispatches` | Optional `sessionId` query, exact ID only |
+| GET | `/api/terminal/dispatches/:appInstanceId/:dispatchId` | Complete handle in the path |
+| PATCH | `/api/terminal/dispatches/:appInstanceId/:dispatchId` | `{expectedVersion,payload}` |
+| POST | `/api/terminal/dispatches/:appInstanceId/:dispatchId/cancel` | Empty body |
+
+Enqueue returns `{accepted:true,dispatch:record}` inside the normal `{success,data}` envelope. List returns metadata records; authorized get adds `payload` only while queued. Edit and cancel return the current record. Records include `handle`, exact `binding`, trusted `source`, `version`, `state`, `blockReason`, queue deadline and timestamps. Edits preserve FIFO order. The same request key and payload from the same authenticated source return the same dispatch; a changed payload conflicts. A supplied source or caller identity is rejected.
+
+`accepted` means admission only. `submitted` means the Enter write was confirmed, not that the agent started or the task succeeded. `outcome` is `unknown`; existing provider `subtype: "success"` is not task-success evidence. This lane does not implement completion tracking or foreground wait budgets. Next-item readiness uses the verified signal classifier, not idle screen status: permission, password, question and selection prompts and unsubmitted human input never open the queue. Each message is independent; no Ctrl+C or auto-approval is added.
+
+Only modes marked supported by `resolveDispatchSignalSupport()` auto-send: local macOS App-owned claude/codex with transcript facts and a readable headless composer. Missing facts or unverified providers, broker ownership, Linux/Windows and remote modes do not acquire a writer. Unsupported admitted modes remain `queued` with `blockReason: "unsupported-signal"`, then expire; peer/SSH admission without local authority returns `CAPABILITY_UNAVAILABLE`, never local fallback. Initial transcript resolution may be unavailable until a human first turn creates the source. A completed turn without a fresh composer observation does not release the next item.
+
+Queue timeout is required, 1–86,400,000 ms. Limits remain the shared dispatch defaults: 32 queued/session, 256 queued/App, 64 KiB UTF-8/payload, 4 MiB unsent payload, 1024 records, ended records retained at most 24 hours. Queue timeout never kills submitted work. Cancel only guarantees cancellation before `dispatching`; it does not interrupt the terminal. Cancelling a change observer does not cancel the dispatch.
+
+`REQUEST_CONFLICT` / `TOO_LATE` are 409. `DISPATCH_INSTANCE_EXPIRED` is 410 after App restart; a removed handle in the same instance is `DISPATCH_NOT_FOUND` / 404. Neither allows replay. Authority or generation changes retain the existing 403/409 errors. A failed pre-write runner attempt records `failure:{code,phase,sideEffect:"none"}`. Text possibly written but Enter unconfirmed records `state:"unknown"`, `outcome:"unknown"`, `failure.sideEffect:"possible"`; it is never replayed and blocks further automatic writes under that binding. The Main ledger is memory-only and normal shutdown releases queued payloads and observers; broker processes continuing after Quit do not continue this queue. Old direct input/submit, keep-alive and workflow policies are unchanged.
+
 ## Generic Tool Runtime entry
 
 `GET /api/tools` lists the registered tools using the same discovery as renderer `tool:discover`. Data is an array of `{name,category,isReadOnly,isConcurrencySafe,isAvailable}`. Discovery includes unavailable tools and caller-dependent tools; it is not an external-call whitelist or a guarantee that a call will succeed.
