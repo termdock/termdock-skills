@@ -166,6 +166,8 @@ termdock layout restore --file <path> --json
 `activate` focuses a pane, `activate-panel` focuses a tab, which is the one to
 use for a background tab with no pane.
 
+Layout writes that would unload an editor with unsaved changes are rejected as a whole; no layout or focus change is applied and no dialog opens. `set`, `assign`, `activate-panel` and `restore` print `Termdock Terminal API error: UNSAVED_EDITS: <message>` to stderr and exit `64` (HTTP `409`), not `69`. Ask the user to save or discard the affected edits before trying again. Do not blindly retry or discard edits for them. `activate` only changes pane focus and does not unload editors; reads and writes that keep a dirty editor mounted remain available. All layout mutation commands include the API error code in stderr.
+
 **Save with `--full` if you intend to restore.** Without it you get the slim
 shape, where a pane carries `id`, `terminalId`, and an optional `contentType`
 (#2150). Restore matches panes on their content bindings, which the slim shape
