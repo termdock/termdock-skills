@@ -51,7 +51,7 @@ Completion is accepted only with this dispatch's submission baseline, session ge
 
 Both endpoints use the existing Terminal API bearer-token validation and enabled gate. Because the registry holds tools from both scope domains, a service token must hold **both** `terminal` and `agent-session` scopes; a token with only one (for example the read-only MCP adapter's `terminal`-only token) gets `403 FORBIDDEN_SCOPE`. Tokens minted by the CLI and tokens created without `scopes` hold both. There are no per-tool scope checks beyond that: the tool decides whether the operation is allowed. Keep it on loopback; never expose it through the webhook tunnel.
 
-Responses use the existing HTTP ToolResult conversion: `{success:true,data}` or `{success:false,error:{code,message}}`. Known terminal errors, including a recognized `errorCode` from the registry or tool, retain their HTTP status; validation errors return `400 INVALID_TOOL_INPUT`; an unknown tool name returns `404 TOOL_NOT_FOUND`. Errors without a recognized terminal code return `500 TOOL_CALL_FAILED`, preserving the registry/tool error message. An unavailable registry returns `503 TOOL_RUNTIME_UNAVAILABLE`. The existing 1 MiB request-body limit applies. There is no new input/result adaptation or tool-specific authorization in this route. Tools requiring a renderer caller, such as `peer:host-terminal-view-intents`, return their own rejection. Calls are unary, not event subscriptions; the generic endpoint does not provide renderer cancellation/progress channels.
+Responses use the existing HTTP ToolResult conversion: `{success:true,data}` or `{success:false,error:{code,message}}`. Known terminal errors, including a recognized `errorCode` from the registry or tool, retain their HTTP status; validation errors return `400 INVALID_TOOL_INPUT`; an unknown tool name returns `404 TOOL_NOT_FOUND`. A refusal the tool declares as caller-actionable returns `409` with the tool's own code in `error.code` (for example `git:worktree-remove` answering `WORKTREE_IN_USE`, `WORKTREE_DIRTY` or `WORKTREE_NEEDS_ACK`); retrying the same request never succeeds, so change the input or clear what blocks it. Other errors without a recognized terminal code return `500 TOOL_CALL_FAILED`, preserving the registry/tool error message. An unavailable registry returns `503 TOOL_RUNTIME_UNAVAILABLE`. The existing 1 MiB request-body limit applies. There is no new input/result adaptation or tool-specific authorization in this route. Tools requiring a renderer caller, such as `peer:host-terminal-view-intents`, return their own rejection. Calls are unary, not event subscriptions; the generic endpoint does not provide renderer cancellation/progress channels.
 
 ```bash
 curl -s -H "Authorization: Bearer $TERMINAL_API_TOKEN" \
@@ -170,7 +170,8 @@ same as "no rules".
 `INVALID_TOOL_INPUT` is not keep-alive specific: any body the tool schema
 rejects comes back as 400 on the session, keep-alive, layout and workspace
 endpoints. Resending it unchanged never succeeds, so fix the body instead of
-retrying. A 500 `TOOL_CALL_FAILED` is the other case, where the tool itself
+retrying. The same holds for a `409` carrying a tool's own code from
+`/api/tools/:name`. A 500 `TOOL_CALL_FAILED` is the other case, where the tool itself
 broke and a retry can make sense. `/api/terminal/notify` answers a rejected
 message with `400 INVALID_NOTIFY_MESSAGE` instead: same status, different code.
 
