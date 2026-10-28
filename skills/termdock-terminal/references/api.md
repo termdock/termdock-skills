@@ -186,6 +186,10 @@ message with `400 INVALID_NOTIFY_MESSAGE` instead: same status, different code.
 | `POST` | `/api/terminal/layout/panels/:panelId/activate` | Focus a tab |
 | `POST` | `/api/terminal/layout/restore` | Restore a layout snapshot, in the shape `?full=true` returns |
 
+Layout writes do not open a confirmation dialog. If a write would unmount an editor with unsaved changes, it rejects the entire request without applying any layout or focus change: HTTP `409`, `{ "success": false, "error": { "code": "UNSAVED_EDITS", "message": "Layout change would close an editor with unsaved changes. Ask the user to save or discard those changes first; no part of the layout change was applied." } }`.
+
+The same code is returned by set, restore, assign and panel activation, including their `terminal:set-layout`, `terminal:restore-layout`, `terminal:assign-pane` and `terminal:set-active-panel` tools. Pane activation (`terminal:set-active-pane`) uses the same dispatch and error contract, but currently only changes focus and does not unload editors. Reads and writes that keep the dirty editor mounted still work. Ask the user to save or discard the affected edits first; do not blindly retry or discard edits for them. Other validation failures keep their existing codes.
+
 Capture the snapshot you intend to restore with `?full=true`. Restore binds panes
 by `contentType` / `contentId`, which the default slim shape does not carry:
 posting a slim snapshot still applies the layout with every pane left empty, and
