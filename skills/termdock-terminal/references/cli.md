@@ -58,6 +58,8 @@ Check `blockReason` and `failure`. Unsupported signal modes stay queued with `un
 
 ## Sessions
 
+On macOS, `session list --json` may report `broker.localNetworkAttribution: "severed"` and `broker.localNetworkAffectedBrokerInstanceIds`. Affected terminals may not reach the local network. Preserve their work and let the user choose when to restart the broker; a missing warning does not prove attribution is healthy.
+
 ```bash
 termdock session create --workspace <id> [--name <name>] [--background] --json
 termdock session list [--workspace <id>] --json
