@@ -2,7 +2,7 @@
 name: termdock-ast
 displayName: Termdock AST
 description: Queries AST index to find symbol locations, file dependencies, callers, and impact analysis. Use when user asks where is X, who calls X, what depends on X, or before refactoring. Skip when user provides exact file path.
-version: 3
+version: 4
 minAppVersion: 1.25.0
 ---
 
@@ -176,6 +176,10 @@ Always check `success` before using `data`.
 ### Symbol Detail Positions
 
 `/api/symbols/<symbolId>` returns `line` and `column` as 0-indexed values. The `symbols` method of `POST /api/query` and the `termdock_node` tool expose the same start as `location.range.start.line` and `.character`. Do not assume `range.end` covers the full declaration: when no top-level end position is available it falls back to the start.
+
+### References Analysis
+
+`POST /api/query` with `method: "analyze"` and `params.include: ["references"]` is not supported: it returns empty `references` and a `data.analysis.warnings` entry. An empty result does not mean the symbol is unreferenced. Use callers queries for call sites, or Tool Runtime `ast:find-references` for usage locations (LSP when available, otherwise text search).
 
 ## Key Notes
 
