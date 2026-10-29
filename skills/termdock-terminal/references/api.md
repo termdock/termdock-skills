@@ -362,6 +362,7 @@ The API also accepts `{"kind":"once","atMs":<future epoch milliseconds>}`.
 
 ## Local terminal ownership (`persistent-term-*`)
 
+- On macOS, `terminal:list` and `GET /api/terminal/sessions` may return `broker.localNetworkAttribution: "severed"` with `broker.localNetworkAffectedBrokerInstanceIds`. Terminals on those brokers may not reach the local network. Preserve their work and let the user choose when to restart the broker. Missing fields do not prove attribution is healthy.
 - Local workspace create defaults to broker ownership on desktop, split panes, HTTP, CLI and Tool Runtime. Terminals keep running after App Quit; there is no user-facing persistent mode or special creation entry. Existing live App-owned processes are not migrated.
 - `terminal:create` and HTTP create accept `persistence?: "app" | "broker"`: omitted means automatic broker with silent App-owned fallback; `app` explicitly selects App-owned lifetime; `broker` requires the broker and reports failure rather than falling back. No new CLI flag is added.
 - Capability unavailable, blocked Windows Job, broker unreachable/incompatible or unsupported exact launch options fall back before a native effect. Custom env/cwd/shell, persisted logs and dimensions unsupported by an older broker retain the App-owned capability. Unknown sent-create outcomes never open a second shell. Remote/peer/SSH workspaces retain their remote owner.
