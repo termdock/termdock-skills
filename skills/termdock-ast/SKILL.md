@@ -2,7 +2,7 @@
 name: termdock-ast
 displayName: Termdock AST
 description: Queries AST index to find symbol locations, file dependencies, callers, and impact analysis. Use when user asks where is X, who calls X, what depends on X, or before refactoring. Skip when user provides exact file path.
-version: 2
+version: 3
 minAppVersion: 1.20.0
 ---
 
@@ -59,6 +59,7 @@ curl 'http://localhost:3033/api/search?q=<name>&workspace=<wsId>&limit=10'
 - `symbolId`: Use for callers/calls queries
 - `file`: Absolute path
 - `line`: 0-indexed (add 1 for display)
+- `column`: 0-indexed indexed-definition start (add 1 for a 1-based editor). It can be the declaration start rather than the name, and non-ASCII text before it can make the source offset unit differ.
 - `type`: 5=Class, 6=Method, 11=Interface, 12=Function
 
 ### 2. File Dependencies
@@ -171,6 +172,10 @@ All APIs return:
 Always check `success` before using `data`.
 
 ---
+
+### Symbol Detail Positions
+
+`/api/symbols/<symbolId>` returns `line` and `column` as 0-indexed values. The `symbols` method of `POST /api/query` and the `termdock_node` tool expose the same start as `location.range.start.line` and `.character`. Do not assume `range.end` covers the full declaration: when no top-level end position is available it falls back to the start.
 
 ## Key Notes
 
