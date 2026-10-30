@@ -2,7 +2,7 @@
 name: termdock-ast
 displayName: Termdock AST
 description: Queries AST index to find symbol locations, file dependencies, callers, and impact analysis. Use when user asks where is X, who calls X, what depends on X, or before refactoring. Skip when user provides exact file path.
-version: 6
+version: 7
 minAppVersion: 1.25.0
 ---
 
