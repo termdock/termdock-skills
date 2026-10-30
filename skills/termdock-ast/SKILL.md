@@ -2,7 +2,7 @@
 name: termdock-ast
 displayName: Termdock AST
 description: Queries AST index to find symbol locations, file dependencies, callers, and impact analysis. Use when user asks where is X, who calls X, what depends on X, or before refactoring. Skip when user provides exact file path.
-version: 5
+version: 7
 minAppVersion: 1.25.0
 ---
 
@@ -49,6 +49,8 @@ The list is ordered by status and name, not by which project you are in, so pick
 ---
 
 ## API Reference
+
+For persisted-index compatibility and read-only behavior, see [references/api.md](references/api.md).
 
 ### 1. Search Symbols
 ```bash
