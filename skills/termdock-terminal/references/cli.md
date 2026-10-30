@@ -224,6 +224,8 @@ text. See `api.md` for the reference payload and target-workspace rules.
 
 ## Local terminal ownership (`persistent-term-*`)
 
+`session list --json` and `session status <id> --json` may return `persistent.brokerBuild: {status, lastKnown}` for broker-owned sessions. `status` is `current`, `different`, or `unknown`; `different` is not a version ordering, and `lastKnown` marks a comparison confirmed before disconnect. Missing or unknown is not current. If `broker.listComplete` is false, `broker.queryErrorCode` is present, or listing fails for size, the list is incomplete, not zero. The projection does not switch brokers or guarantee new sessions use a different build.
+
 - Local workspace create defaults to broker ownership on desktop, split panes, HTTP, CLI and Tool Runtime. Terminals keep running after App Quit; there is no user-facing persistent mode or special creation entry. Existing live App-owned processes are not migrated.
 - `terminal:create` and HTTP create accept `persistence?: "app" | "broker"`: omitted means automatic broker with silent App-owned fallback; `app` explicitly selects App-owned lifetime; `broker` requires the broker and reports failure rather than falling back. No new CLI flag is added.
 - Capability unavailable, blocked Windows Job, broker unreachable/incompatible or unsupported exact launch options fall back before a native effect. Custom env/cwd/shell, persisted logs and dimensions unsupported by an older broker retain the App-owned capability. Unknown sent-create outcomes never open a second shell. Remote/peer/SSH workspaces retain their remote owner.
