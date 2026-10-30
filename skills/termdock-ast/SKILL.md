@@ -2,7 +2,7 @@
 name: termdock-ast
 displayName: Termdock AST
 description: Queries AST index to find symbol locations, file dependencies, callers, and impact analysis. Use when user asks where is X, who calls X, what depends on X, or before refactoring. Skip when user provides exact file path.
-version: 4
+version: 5
 minAppVersion: 1.25.0
 ---
 
@@ -179,7 +179,11 @@ Always check `success` before using `data`.
 
 ### References Analysis
 
-`POST /api/query` with `method: "analyze"` and `params.include: ["references"]` is not supported: it returns empty `references` and a `data.analysis.warnings` entry. An empty result does not mean the symbol is unreferenced. Use callers queries for call sites, or Tool Runtime `ast:find-references` for usage locations (LSP when available, otherwise text search).
+Use `POST /api/query` with `method: "analyze"`, `params.symbolIds`, and `params.include: ["references"]` for semantic references to TS, TSX, JS, and JSX targets. The TypeScript LSP supplies locations; indexed source symbols supply the IDs. Other languages still return an unsupported warning. `data.analysis.data.references` contains relations and `referenceMap` maps each target ID to distinct source IDs. Mixed includes retain the first analysis and add these fields.
+
+Inspect `referenceStatus` for each target: `status` and `reason` distinguish unavailable requests from successful empty results; `provider`, `language`, `supportedLanguages`, and `scope` identify the source and boundaries. `indexFreshness`, `coverage`, `lspCoverage`, and `completeness` describe what is known, not a guarantee: LSP coverage is currently `unknown`. `unresolved.observed`, `unresolved.reasons`, and `unresolved.locations` describe observed locations that could not be assigned an existing source ID; `unresolved.total` is `null` when total coverage is unknown. `excludedCount` and `excludedReasons` count locations outside the scope. `truncated.output` means the service stopped processing locations, and `truncated.provider: "unknown"` means provider truncation is unknown. `referenceBatch.truncated` and `omitted` disclose targets not analyzed.
+
+The service processes at most 20 targets, 200 locations per target, 64 distinct files per target (including the target file), and 8 MiB of retained snapshot text measured in UTF-8 bytes; `params.maxResults` may lower the location limit. Relation and unresolved-location details also share a 400,000-character response budget; omitted details retain reason counts and set `truncated.output`, with `unresolved.omittedLocations` for omitted locations. These limits do not bound the array already returned by LSP. When there is a warning or truncation, an empty result does not prove the symbol is unreferenced. Tool Runtime `ast:reference-analysis` uses the same query; `ast:find-references` returns locations and may fall back to text search, while callers only cover call sites.
 
 ## Key Notes
 
