@@ -239,9 +239,9 @@ raw PTY input. Ambiguous agent associations return
 {
   "source": "handoff-monitor",
   "eventKind": "artifact-changed",
-  "dedupeKey": "duo-award-a",
-  "message": "Duo 交付有變化，請讀取並核對。",
-  "metadata": { "artifact": "/tmp/duo-award-a/REPORT.md" }
+  "dedupeKey": "codex-task-a",
+  "message": "codex 交付有變化，請讀取並核對。",
+  "metadata": { "artifact": "/tmp/codex-task-a/REPORT.md" }
 }
 ```
 
