@@ -59,7 +59,7 @@ human instruction. A shell-only terminal is not an AgentSession and is rejected;
 ```bash
 termdock agent callback <agent-session-id-or-tab-name> \
   --source handoff-monitor --event-kind artifact-changed \
-  --dedupe-key duo-award-a --message "Duo 交付有變化，請讀取並核對。" --json
+  --dedupe-key codex-task-a --message "codex 交付有變化，請讀取並核對。" --json
 ```
 
 The callback shares that agent session's normal send queue and returns a
