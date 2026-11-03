@@ -231,6 +231,10 @@ terminal; it is distinct from the terminal session and its PTY.
 
 `resolve` returns that conversation id in its `sessionId` field, and `attach` accepts either form. Every other path above addresses a single run, so pass the `sessionId` that create or attach returned. Resolving and then calling `GET /:id` with the resolved id gives you a 404.
 
+For OpenCode interactive sessions, `waiting-permission` requires a decision in
+the visible OpenCode TUI. `/input` sends a conversation prompt and does not
+reply to the permission request. Do not treat an accepted prompt as approval.
+
 ### External monitor callbacks
 
 `POST /api/agent-sessions/:id/callbacks` accepts an existing AgentSession id,

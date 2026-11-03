@@ -153,6 +153,8 @@ directly into a terminal and does not add callback metadata.
 An OpenCode daemon callback waits up to 30 seconds for the current turn to
 finish; if it is still busy, the command reports
 `AGENT_SESSION_CALLBACK_CONFLICT` without interrupting that turn.
+An OpenCode interactive permission request must be resolved in its visible TUI;
+AgentSession `/input` sends a conversation prompt, not a permission reply.
 
 ## Layout
 
