@@ -31,9 +31,17 @@ termdock tool terminal:detach --input-file detach.json
 
 Omitted input defaults to `{}`; `--input` and `--input-file` are mutually exclusive. `detach.json` must contain `{ "sessionId": "persistent-term-...", "writer": { "attachmentId": "...", "generation": 2 } }`, using the writer returned by attach, not invented values. Read current generation before attaching; takeover revokes the old writer. Detach leaves the process running. This differs from the existing `session attach` SSE/stdin bridge.
 
-`tool` always prints unwrapped JSON data, with or without `--json`. It uses the same token resolution, HTTP transport and 1 MiB byte limit as existing commands. Bad options/JSON or HTTP 4xx exit `64`; unreadable input files exit `74`; transport/HTTP 5xx exit `69`. Tool errors go to stderr. `--list` reports registered metadata, including unavailable/caller-dependent tools, not a whitelist.
+`tool` always prints unwrapped JSON data, with or without `--json`. It uses the same token resolution, HTTP transport and 1 MiB byte limit as existing commands. Bad options/JSON or HTTP 4xx exit `64`; unreadable input files exit `74`; transport/HTTP 5xx exit `69`. Tool errors go to stderr as `Termdock Terminal API error: <CODE>: <message>` (4xx) or `Termdock Terminal API unavailable: <CODE>: <message>` (5xx). A tool's own refusal, such as `WORKTREE_IN_USE` from `git:worktree-remove`, is a 4xx: act on the code instead of retrying. `--list` reports registered metadata, including unavailable/caller-dependent tools, not a whitelist.
 
 Context flags become HTTP query parameters, never tool input or window identity. For remote routing use `--workspace-id`; input `workspaceId` alone is not context. Tool Runtime applies its existing checks; caller-dependent tools can refuse HTTP calls. A service token needs both `terminal` and `agent-session` scopes for this generic surface (a token with only one gets `403 FORBIDDEN_SCOPE`); the CLI's own token has both, and there are no further per-tool scope restrictions. Keep the API on loopback. See `api.md` for the shared response/error behavior.
+
+To create a visible peer terminal, call `peer:terminal-workspaces` with `{peerId}`, then `peer:workspace-mount` with `{peerId,remoteWorkspaceId,workspaceName,deviceName}`. Pass the mount's returned `workspace.id`, not the host opaque `remoteWorkspaceId`, as `workspaceId` to the local tool (do not set a remote-routing `--workspace-id`):
+
+```bash
+termdock tool peer:terminal-create --input '{"peerId":"<peer-id>","workspaceId":"<mounted-workspace-id>","cols":120,"rows":40}'
+```
+
+The peer must match the mount. An opaque host ID or wrong mount is rejected with `PEER_MOUNTED_WORKSPACE_REQUIRED` before creation. Legacy `deviceName` and `workspaceName` fields are accepted but display metadata comes from the mount.
 
 ## Workspaces
 
@@ -57,6 +65,8 @@ Keep both handle fields from enqueue; do not invent or reuse a handle after App 
 Check `blockReason` and `failure`. Unsupported signal modes stay queued with `unsupported-signal` until the deadline; do not send the prompt yourself as a fallback. Current auto-send support is local macOS App-owned claude/codex with verified transcript facts, a readable headless composer and no human input. Broker, unverified providers/platforms and remote paths are not promoted to supported. `unknown` with `failure.sideEffect:"possible"` means text/Enter may have reached the terminal: never replay it. `submitted` is only confirmed submission, and provider `subtype: "success"` still maps to dispatch outcome unknown. Use `dispatch wait` with an explicit integer `--wait-timeout` (0–120000 ms), no prompt. It prints the same handle and metadata plus `waitOutcome` (`state-reached`, `budget-exhausted`, `cancelled`). Waiting-human, unknown and terminal states end the foreground wait. Budget exhaustion preserves queued/blockReason or submitted/running; it is not completion or failure. Ctrl+C/CLI exit only detaches the HTTP waiter. Re-query with get or repeat wait, never enqueue again. Completed means this provider turn ended, not goal success. The UI supports Wait for turn, Move to background and Re-query dispatch. Completion tracking expires after 24 hours without stopping the terminal. See `api.md` for limits, restart errors, and authorization.
 
 ## Sessions
+
+On macOS, `session list --json` may report `broker.localNetworkAttribution: "severed"` and `broker.localNetworkAffectedBrokerInstanceIds`. Affected terminals may not reach the local network. Preserve their work and let the user choose when to restart the broker; a missing warning does not prove attribution is healthy.
 
 ```bash
 termdock session create --workspace <id> [--name <name>] [--background] --json
@@ -151,6 +161,8 @@ directly into a terminal and does not add callback metadata.
 An OpenCode daemon callback waits up to 30 seconds for the current turn to
 finish; if it is still busy, the command reports
 `AGENT_SESSION_CALLBACK_CONFLICT` without interrupting that turn.
+An OpenCode interactive permission request must be resolved in its visible TUI;
+AgentSession `/input` sends a conversation prompt, not a permission reply.
 
 ## Layout
 
@@ -165,6 +177,8 @@ termdock layout restore --file <path> --json
 
 `activate` focuses a pane, `activate-panel` focuses a tab, which is the one to
 use for a background tab with no pane.
+
+Layout writes that would unload an editor with unsaved changes are rejected as a whole; no layout or focus change is applied and no dialog opens. `set`, `assign`, `activate-panel` and `restore` print `Termdock Terminal API error: UNSAVED_EDITS: <message>` to stderr and exit `64` (HTTP `409`), not `69`. Ask the user to save or discard the affected edits before trying again. Do not blindly retry or discard edits for them. `activate` only changes pane focus and does not unload editors; reads and writes that keep a dirty editor mounted remain available. All layout mutation commands include the API error code in stderr.
 
 **Save with `--full` if you intend to restore.** Without it you get the slim
 shape, where a pane carries `id`, `terminalId`, and an optional `contentType`
@@ -220,6 +234,8 @@ text. See `api.md` for the reference payload and target-workspace rules.
 
 ## Local terminal ownership (`persistent-term-*`)
 
+`session list --json` and `session status <id> --json` may return `persistent.brokerBuild: {status, lastKnown}` for broker-owned sessions. `status` is `current`, `different`, or `unknown`; `different` is not a version ordering, and `lastKnown` marks a comparison confirmed before disconnect. Missing or unknown is not current. If `broker.listComplete` is false, `broker.queryErrorCode` is present, or listing fails for size, the list is incomplete, not zero. New broker-owned sessions use the app's authenticated broker build; older sessions stay with their holder. When `broker.admission.reason` is `old-broker-limit`, end unneeded old terminals and retry. Closing a tab may not end its terminal. Existing matching current brokers can still accept creates even if the retained old-owner count is over the limit.
+
 - Local workspace create defaults to broker ownership on desktop, split panes, HTTP, CLI and Tool Runtime. Terminals keep running after App Quit; there is no user-facing persistent mode or special creation entry. Existing live App-owned processes are not migrated.
 - `terminal:create` and HTTP create accept `persistence?: "app" | "broker"`: omitted means automatic broker with silent App-owned fallback; `app` explicitly selects App-owned lifetime; `broker` requires the broker and reports failure rather than falling back. No new CLI flag is added.
 - Capability unavailable, blocked Windows Job, broker unreachable/incompatible or unsupported exact launch options fall back before a native effect. Custom env/cwd/shell, persisted logs and dimensions unsupported by an older broker retain the App-owned capability. Unknown sent-create outcomes never open a second shell. Remote/peer/SSH workspaces retain their remote owner.
@@ -228,7 +244,7 @@ text. See `api.md` for the reference payload and target-workspace rules.
 - Names resolve through the ordinary terminal name namespace. Unified protocol v1.1 supports authoritative writer-fenced rename, names up to 200 characters, shell process evidence, dimensions 500×100 and optional bounded error hints. Only v1.1/v1.0 are negotiated. v1.0 has no name/rename/process-evidence/error-message extensions and retains 240×100; new fields are stripped from old-client replies/events/deduplicated results. v1.1-only sessions require a compatible client; old broker rename returns `RENAME_UNSUPPORTED`.
 - Closing a desktop tab or `session destroy` terminates its shell and children and waits for process-tree acknowledgement. A `lost` session (its broker instance is gone) cannot be terminated; destroy only forgets it locally and returns `treeReaped:false, forgotten:true`. Quit/Cmd+R and explicit `terminal:detach` do not terminate them. There is no session-count cap. The broker warns at 192 MiB RSS and refuses new creation at 256 MiB (`RESOURCE_LIMIT`), without terminating existing work. PTY/process exhaustion returns `RESOURCE_LIMIT` with a readable recovery hint from a v1.1 broker; other spawn failures return `CAPABILITY_UNAVAILABLE`.
 - Startup uses the one savedSessions/layout: living processes reconnect in their original pane/order; confirmed ended/missing processes rebuild with a NEW ID, saved history and keep-alive rules. Unreachable/incompatible broker panes stay in place for retry; other writers remain read-only until confirmed takeover. Manual `terminal:restore-persistent {sessionId}` is Tool Runtime only (no HTTP/CLI route), returns `{snapshot, broker, session?, errorCode?}` and does not accept caller cwd/shell or replay uncertain create. Existing App-owned snapshots retain snapshot-only restore.
-- Read-only `terminal:quit-summary {}` returns App-ending/background-running counts; a broker count of `null` is unknown, not zero. Broker mutations are never automatically retried. `name` is broker-held metadata; `paneId`/`stealFocus` use ordinary desktop placement, and `background:true` cannot be combined with placement.
+- Read-only `terminal:quit-summary {}` returns App-ending/background-running counts; a broker count of `null` is unknown, not zero. Newer apps also return `peerOwnedCount`, `sessions[]` (at most 100 broker-held terminals: `sessionId`, `name?`, `workspaceId`, `workspaceName?`, `peer?.peerDeviceName?` for terminals other desktops created; no terminal content) and `omittedSessionCount`; treat them as optional. `terminal:stop-persistent-broker` belongs to the desktop quit dialog only and returns `HUMAN_DECISION_REQUIRED` to CLI/HTTP/agent callers; do not call it. Broker mutations are never automatically retried. `name` is broker-held metadata; `paneId`/`stealFocus` use ordinary desktop placement, and `background:true` cannot be combined with placement.
 
 ## Current-screen condition waits (v1.24)
 

@@ -2,8 +2,8 @@
 name: termdock-terminal
 displayName: Termdock Terminal
 description: Drive Termdock terminals and notify existing AgentSessions from inside one. Open a session for a long job, read or send terminal input, arrange panes, schedule a wake-up, or send a structured external agent callback. Use when work would otherwise block your terminal, when you need another session's output, or when an external monitor needs to notify an agent without posing as a human.
-version: 46
-minAppVersion: 1.24.0
+version: 54
+minAppVersion: 1.25.0
 ---
 
 # Drive Termdock From Inside A Terminal
@@ -59,7 +59,7 @@ human instruction. A shell-only terminal is not an AgentSession and is rejected;
 ```bash
 termdock agent callback <agent-session-id-or-tab-name> \
   --source handoff-monitor --event-kind artifact-changed \
-  --dedupe-key duo-award-a --message "Duo 交付有變化，請讀取並核對。" --json
+  --dedupe-key codex-task-a --message "codex 交付有變化，請讀取並核對。" --json
 ```
 
 The callback shares that agent session's normal send queue and returns a

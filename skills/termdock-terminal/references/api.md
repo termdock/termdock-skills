@@ -49,9 +49,11 @@ Completion is accepted only with this dispatch's submission baseline, session ge
 
 `POST /api/tools/:name` calls that tool directly. URL-encode the tool name; the JSON body is the tool input itself, not `{name,input}`. Optional query parameters `workspaceId`, `workspacePath`, and `sessionId` supply ToolContext separately. Omitted `workspacePath` is `""`. Input fields are not copied into context. Context uses `invocationOrigin:"http"` and has no window `caller`; workspace routing, root claims, validation and permissions remain the tool/registry's responsibility. For remote workspace calls, supply context `workspaceId`; an input `workspaceId` alone is not routing context. Peer/SSH capabilities and offline failures remain governed by Tool Runtime, with no local fallback added here.
 
+For `peer:terminal-create`, call the local tool without a remote routing context. Its input is `{peerId,workspaceId,cols,rows}`; `workspaceId` must be the local mounted peer workspace ID belonging to `peerId`, not the host opaque ID returned by `peer:terminal-workspaces`. Use that opaque ID as `remoteWorkspaceId` in `peer:workspace-mount` and pass the returned `workspace.id` to create. A successful call returns `{sessionId}` and announces a visible terminal in the mounted workspace. Old callers passing an opaque ID, a local workspace, or a different peer's mount receive `PEER_MOUNTED_WORKSPACE_REQUIRED` before any remote creation; HTTP returns 409. Optional legacy `deviceName` and `workspaceName` input fields remain accepted but the mounted workspace supplies the display metadata.
+
 Both endpoints use the existing Terminal API bearer-token validation and enabled gate. Because the registry holds tools from both scope domains, a service token must hold **both** `terminal` and `agent-session` scopes; a token with only one (for example the read-only MCP adapter's `terminal`-only token) gets `403 FORBIDDEN_SCOPE`. Tokens minted by the CLI and tokens created without `scopes` hold both. There are no per-tool scope checks beyond that: the tool decides whether the operation is allowed. Keep it on loopback; never expose it through the webhook tunnel.
 
-Responses use the existing HTTP ToolResult conversion: `{success:true,data}` or `{success:false,error:{code,message}}`. Known terminal errors, including a recognized `errorCode` from the registry or tool, retain their HTTP status; validation errors return `400 INVALID_TOOL_INPUT`; an unknown tool name returns `404 TOOL_NOT_FOUND`. Errors without a recognized terminal code return `500 TOOL_CALL_FAILED`, preserving the registry/tool error message. An unavailable registry returns `503 TOOL_RUNTIME_UNAVAILABLE`. The existing 1 MiB request-body limit applies. There is no new input/result adaptation or tool-specific authorization in this route. Tools requiring a renderer caller, such as `peer:host-terminal-view-intents`, return their own rejection. Calls are unary, not event subscriptions; the generic endpoint does not provide renderer cancellation/progress channels.
+Responses use the existing HTTP ToolResult conversion: `{success:true,data}` or `{success:false,error:{code,message}}`. Known terminal errors, including a recognized `errorCode` from the registry or tool, retain their HTTP status; validation errors return `400 INVALID_TOOL_INPUT`; an unknown tool name returns `404 TOOL_NOT_FOUND`. A refusal the tool declares as caller-actionable returns `409` with the tool's own code in `error.code` (for example `git:worktree-remove` answering `WORKTREE_IN_USE`, `WORKTREE_DIRTY` or `WORKTREE_NEEDS_ACK`); retrying the same request never succeeds, so change the input or clear what blocks it. Other errors without a recognized terminal code return `500 TOOL_CALL_FAILED`, preserving the registry/tool error message. An unavailable registry returns `503 TOOL_RUNTIME_UNAVAILABLE`. The existing 1 MiB request-body limit applies. There is no new input/result adaptation or tool-specific authorization in this route. Tools requiring a renderer caller, such as `peer:host-terminal-view-intents`, return their own rejection. Calls are unary, not event subscriptions; the generic endpoint does not provide renderer cancellation/progress channels.
 
 ```bash
 curl -s -H "Authorization: Bearer $TERMINAL_API_TOKEN" \
@@ -170,7 +172,8 @@ same as "no rules".
 `INVALID_TOOL_INPUT` is not keep-alive specific: any body the tool schema
 rejects comes back as 400 on the session, keep-alive, layout and workspace
 endpoints. Resending it unchanged never succeeds, so fix the body instead of
-retrying. A 500 `TOOL_CALL_FAILED` is the other case, where the tool itself
+retrying. The same holds for a `409` carrying a tool's own code from
+`/api/tools/:name`. A 500 `TOOL_CALL_FAILED` is the other case, where the tool itself
 broke and a retry can make sense. `/api/terminal/notify` answers a rejected
 message with `400 INVALID_NOTIFY_MESSAGE` instead: same status, different code.
 
@@ -184,6 +187,10 @@ message with `400 INVALID_NOTIFY_MESSAGE` instead: same status, different code.
 | `POST` | `/api/terminal/layout/panes/:paneId/activate` | Focus a pane |
 | `POST` | `/api/terminal/layout/panels/:panelId/activate` | Focus a tab |
 | `POST` | `/api/terminal/layout/restore` | Restore a layout snapshot, in the shape `?full=true` returns |
+
+Layout writes do not open a confirmation dialog. If a write would unmount an editor with unsaved changes, it rejects the entire request without applying any layout or focus change: HTTP `409`, `{ "success": false, "error": { "code": "UNSAVED_EDITS", "message": "Layout change would close an editor with unsaved changes. Ask the user to save or discard those changes first; no part of the layout change was applied." } }`.
+
+The same code is returned by set, restore, assign and panel activation, including their `terminal:set-layout`, `terminal:restore-layout`, `terminal:assign-pane` and `terminal:set-active-panel` tools. Pane activation (`terminal:set-active-pane`) uses the same dispatch and error contract, but currently only changes focus and does not unload editors. Reads and writes that keep the dirty editor mounted still work. Ask the user to save or discard the affected edits first; do not blindly retry or discard edits for them. Other validation failures keep their existing codes.
 
 Capture the snapshot you intend to restore with `?full=true`. Restore binds panes
 by `contentType` / `contentId`, which the default slim shape does not carry:
@@ -226,6 +233,10 @@ terminal; it is distinct from the terminal session and its PTY.
 
 `resolve` returns that conversation id in its `sessionId` field, and `attach` accepts either form. Every other path above addresses a single run, so pass the `sessionId` that create or attach returned. Resolving and then calling `GET /:id` with the resolved id gives you a 404.
 
+For OpenCode interactive sessions, `waiting-permission` requires a decision in
+the visible OpenCode TUI. `/input` sends a conversation prompt and does not
+reply to the permission request. Do not treat an accepted prompt as approval.
+
 ### External monitor callbacks
 
 `POST /api/agent-sessions/:id/callbacks` accepts an existing AgentSession id,
@@ -239,9 +250,9 @@ raw PTY input. Ambiguous agent associations return
 {
   "source": "handoff-monitor",
   "eventKind": "artifact-changed",
-  "dedupeKey": "duo-award-a",
-  "message": "Duo 交付有變化，請讀取並核對。",
-  "metadata": { "artifact": "/tmp/duo-award-a/REPORT.md" }
+  "dedupeKey": "codex-task-a",
+  "message": "codex 交付有變化，請讀取並核對。",
+  "metadata": { "artifact": "/tmp/codex-task-a/REPORT.md" }
 }
 ```
 
@@ -357,15 +368,18 @@ The API also accepts `{"kind":"once","atMs":<future epoch milliseconds>}`.
 
 ## Local terminal ownership (`persistent-term-*`)
 
+- `terminal:list` / `terminal:status` and their HTTP session routes may include `persistent.brokerBuild: {status, lastKnown}`. The status is `current`, `different`, or `unknown`, based on the authenticated holder and verified app manifest, not version ordering; `different` can also mean a newer holder after an app downgrade. `lastKnown: true` means the holder disconnected after confirmation. Missing/unknown is not current. `broker.listComplete: false`, `broker.queryErrorCode`, or a size-limit error means the visible list is incomplete; do not report the missing portion as zero. `peer:host-sessions` may carry the same optional projection. New broker-owned sessions use a matching current broker; existing sessions remain on their holder.
+- A missing current broker with more than two live or possibly live non-current owners blocks broker-owned create with `RESOURCE_LIMIT` and the machine-readable reason `old-broker-limit` (`errorReason` from Tool Runtime, `error.reason` from HTTP). `terminal:list` may expose `broker.admission.reason` with the same value. Do not silently substitute an old broker or an App-owned terminal; end unneeded old terminals and retry. Closing a tab alone may not end its terminal. Existing matching current brokers may still accept creates. The cap is enforced only by apps using this admission protocol, not by older apps.
+- On macOS, `terminal:list` and `GET /api/terminal/sessions` may return `broker.localNetworkAttribution: "severed"` with `broker.localNetworkAffectedBrokerInstanceIds`. Terminals on those brokers may not reach the local network. Preserve their work and let the user choose when to restart the broker. Missing fields do not prove attribution is healthy.
 - Local workspace create defaults to broker ownership on desktop, split panes, HTTP, CLI and Tool Runtime. Terminals keep running after App Quit; there is no user-facing persistent mode or special creation entry. Existing live App-owned processes are not migrated.
-- `terminal:create` and HTTP create accept `persistence?: "app" | "broker"`: omitted means automatic broker with silent App-owned fallback; `app` explicitly selects App-owned lifetime; `broker` requires the broker and reports failure rather than falling back. No new CLI flag is added.
+- `terminal:create` and HTTP create accept `persistence?: "app" | "broker"`: omitted means automatic broker with the existing App-owned fallback for supported failures, except build/admission refusals which do not fallback; `app` explicitly selects App-owned lifetime; `broker` requires the broker and reports failure rather than falling back. No new CLI flag is added.
 - Capability unavailable, blocked Windows Job, broker unreachable/incompatible or unsupported exact launch options fall back before a native effect. Custom env/cwd/shell, persisted logs and dimensions unsupported by an older broker retain the App-owned capability. Unknown sent-create outcomes never open a second shell. Remote/peer/SSH workspaces retain their remote owner.
 - The default create pipeline grants this Main the writer. Input/submit/key/interrupt/resize require that grant and fence stale queued calls; they never take over another client implicitly. Without a valid lease a write returns 409 `STALE_ATTACHMENT`, and rejected input is not retried. Keep-alive and submissions share the ordinary submit chain; `queueUntilReady` and agent submissions use existing readiness logic. CLI `session attach` remains the SSE/stdin bridge, not a broker writer grant.
 - Output uses the same bounded Main projection for renderer and agent reads: `raw` retains ANSI rows; `text`/`content` use App-owned normalization and chrome filtering. Numeric `cursor`/`nextCursor` are App-style line cursors: pass `nextCursor` to `--since` or SSE `since` for the next read. Clear, attachment rebuild or an expired history window returns `truncated:true`; resume from the returned cursor. `snapshotCursor` remains the separate broker source cursor. Follow/SSE and `wait-output` require this Main's attachment and end with `output.error` on takeover/detach (`STALE_ATTACHMENT`), broker disconnect (`BROKER_UNREACHABLE`) or session end (`SESSION_ENDED`, reported only after the retained output has been delivered). CLI follow writes that event in JSON mode and exits nonzero. Reads do not acquire or steal a writer. A session this Main is not attached to (taken over, detached or never attached) is read from a broker snapshot: whenever new output has arrived the line projection is rebuilt, so a `since` read returns the whole retained window with `truncated:true` instead of an increment. An unterminated last row is delivered as it stands; text that later completes that same row is not re-sent, as with App-owned terminals. `screen` still uses the shared headless projection and hash/window rules, with no incremental cursor semantics; `source=dom` remains unsupported. The default window is 50 lines; `ifHash` remains available.
 - Names resolve through the ordinary terminal name namespace. Unified protocol v1.1 supports authoritative writer-fenced rename, names up to 200 characters, shell process evidence, dimensions 500×100 and optional bounded error hints. Only v1.1/v1.0 are negotiated. v1.0 has no name/rename/process-evidence/error-message extensions and retains 240×100; new fields are stripped from old-client replies/events/deduplicated results. v1.1-only sessions require a compatible client; old broker rename returns `RENAME_UNSUPPORTED`.
 - Closing a desktop tab or `session destroy` terminates its shell and children and waits for process-tree acknowledgement. A `lost` session (its broker instance is gone) cannot be terminated; destroy only forgets it locally and returns `treeReaped:false, forgotten:true`. Quit/Cmd+R and explicit `terminal:detach` do not terminate them. There is no session-count cap. The broker warns at 192 MiB RSS and refuses new creation at 256 MiB (`RESOURCE_LIMIT`), without terminating existing work. PTY/process exhaustion returns `RESOURCE_LIMIT` with a readable recovery hint from a v1.1 broker; other spawn failures return `CAPABILITY_UNAVAILABLE`.
 - Startup uses the one savedSessions/layout: living processes reconnect in their original pane/order; confirmed ended/missing processes rebuild with a NEW ID, saved history and keep-alive rules. Unreachable/incompatible broker panes stay in place for retry; other writers remain read-only until confirmed takeover. Manual `terminal:restore-persistent {sessionId}` is Tool Runtime only (no HTTP/CLI route), returns `{snapshot, broker, session?, errorCode?}` and does not accept caller cwd/shell or replay uncertain create. Existing App-owned snapshots retain snapshot-only restore.
-- Read-only `terminal:quit-summary {}` returns App-ending/background-running counts; a broker count of `null` is unknown, not zero. Broker mutations are never automatically retried. `name` is broker-held metadata; `paneId`/`stealFocus` use ordinary desktop placement, and `background:true` cannot be combined with placement.
+- Read-only `terminal:quit-summary {}` returns App-ending/background-running counts; a broker count of `null` is unknown, not zero. Newer apps also return `peerOwnedCount`, `sessions[]` (at most 100 broker-held terminals: `sessionId`, `name?`, `workspaceId`, `workspaceName?`, `peer?.peerDeviceName?` for terminals other desktops created; no terminal content) and `omittedSessionCount`; treat them as optional. `terminal:stop-persistent-broker` belongs to the desktop quit dialog only and returns `HUMAN_DECISION_REQUIRED` to CLI/HTTP/agent callers; do not call it. Broker mutations are never automatically retried. `name` is broker-held metadata; `paneId`/`stealFocus` use ordinary desktop placement, and `background:true` cannot be combined with placement.
 
 ### Wait for a current-screen condition
 
