@@ -35,6 +35,14 @@ Omitted input defaults to `{}`; `--input` and `--input-file` are mutually exclus
 
 Context flags become HTTP query parameters, never tool input or window identity. For remote routing use `--workspace-id`; input `workspaceId` alone is not context. Tool Runtime applies its existing checks; caller-dependent tools can refuse HTTP calls. A service token needs both `terminal` and `agent-session` scopes for this generic surface (a token with only one gets `403 FORBIDDEN_SCOPE`); the CLI's own token has both, and there are no further per-tool scope restrictions. Keep the API on loopback. See `api.md` for the shared response/error behavior.
 
+To create a visible peer terminal, call `peer:terminal-workspaces` with `{peerId}`, then `peer:workspace-mount` with `{peerId,remoteWorkspaceId,workspaceName,deviceName}`. Pass the mount's returned `workspace.id`, not the host opaque `remoteWorkspaceId`, as `workspaceId` to the local tool (do not set a remote-routing `--workspace-id`):
+
+```bash
+termdock tool peer:terminal-create --input '{"peerId":"<peer-id>","workspaceId":"<mounted-workspace-id>","cols":120,"rows":40}'
+```
+
+The peer must match the mount. An opaque host ID or wrong mount is rejected with `PEER_MOUNTED_WORKSPACE_REQUIRED` before creation. Legacy `deviceName` and `workspaceName` fields are accepted but display metadata comes from the mount.
+
 ## Workspaces
 
 ```bash
