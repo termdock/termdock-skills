@@ -247,6 +247,8 @@ completion. Structured callbacks require a recognized non-permission prompt.
 A recognized startup permission prompt must be handled by a person: if it remains,
 creation fails but the terminal stays open and the first prompt is not sent.
 Recovery of the daemon does not convert an existing terminal-mode run.
+The terminal closes when the TUI exits or cannot start, which ends the run.
+After the user closes a daemon-mode terminal, `/input` fails until you `attach` again.
 
 Resolve `waiting-permission` in the visible OpenCode TUI, not with a callback.
 Daemon-mode `/input` sends a conversation prompt, not a permission reply.
