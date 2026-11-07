@@ -237,9 +237,22 @@ terminal; it is distinct from the terminal session and its PTY.
 
 `resolve` returns that conversation id in its `sessionId` field, and `attach` accepts either form. Every other path above addresses a single run, so pass the `sessionId` that create or attach returned. Resolving and then calling `GET /:id` with the resolved id gives you a 404.
 
-For OpenCode interactive sessions, `waiting-permission` requires a decision in
-the visible OpenCode TUI. `/input` sends a conversation prompt and does not
-reply to the permission request. Do not treat an accepted prompt as approval.
+OpenCode normally uses daemon HTTP and SSE (`metadata.sdkFamily` is
+`opencode-http-v1`). If the daemon or initial event stream is unavailable before
+the first prompt, it can launch the TUI in terminal mode instead
+(`opencode-terminal-v1`): the run has a local id, screen-derived status, and
+no cross-process attach by that id. Screen detection is best-effort; an
+unrecognized screen does not prevent ordinary prompt input, and does not prove
+completion. Structured callbacks require a recognized non-permission prompt.
+A recognized startup permission prompt must be handled by a person: if it remains,
+creation fails but the terminal stays open and the first prompt is not sent.
+Recovery of the daemon does not convert an existing terminal-mode run.
+
+Resolve `waiting-permission` in the visible OpenCode TUI, not with a callback.
+Daemon-mode `/input` sends a conversation prompt, not a permission reply.
+Terminal-mode `/input` types into the TUI and can affect its current prompt.
+Closing a managed daemon-mode terminal starts one best-effort interrupt; a failed
+or timed-out interrupt is logged and the daemon turn may still be running.
 
 ### External monitor callbacks
 
