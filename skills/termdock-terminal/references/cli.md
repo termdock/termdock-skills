@@ -35,6 +35,8 @@ Omitted input defaults to `{}`; `--input` and `--input-file` are mutually exclus
 
 Context flags become HTTP query parameters, never tool input or window identity. For remote routing use `--workspace-id`; input `workspaceId` alone is not context. Tool Runtime applies its existing checks; caller-dependent tools can refuse HTTP calls. A service token needs both `terminal` and `agent-session` scopes for this generic surface (a token with only one gets `403 FORBIDDEN_SCOPE`); the CLI's own token has both, and there are no further per-tool scope restrictions. Keep the API on loopback. See `api.md` for the shared response/error behavior.
 
+Agent browser access is disabled in this build, even when browser tools are listed and the Terminal API token is valid. Do not attempt to grant yourself access or bypass the gate. The registered `snapshot`, `click`, `type`, `fill`, `get-text`, `screenshot`, and `wait` operations use the generic `termdock tool browser:<name> --input '<json>'` entry. They are limited to the main frame and finite DOM actions, not trusted input events. Reuse the exact `documentGeneration` and opaque `elementRef` returned by snapshot; after navigation or node replacement obtain a fresh snapshot. The CLI prints only the error code/message; use HTTP for `error.details`, and never automatically retry an unknown write outcome. Any future enablement requires desktop consent for a specific service token, workspace, surface, actions and finite duration; see `api.md`.
+
 To create a visible peer terminal, call `peer:terminal-workspaces` with `{peerId}`, then `peer:workspace-mount` with `{peerId,remoteWorkspaceId,workspaceName,deviceName}`. Pass the mount's returned `workspace.id`, not the host opaque `remoteWorkspaceId`, as `workspaceId` to the local tool (do not set a remote-routing `--workspace-id`):
 
 ```bash
@@ -161,8 +163,9 @@ directly into a terminal and does not add callback metadata.
 An OpenCode daemon callback waits up to 30 seconds for the current turn to
 finish; if it is still busy, the command reports
 `AGENT_SESSION_CALLBACK_CONFLICT` without interrupting that turn.
-An OpenCode interactive permission request must be resolved in its visible TUI;
-AgentSession `/input` sends a conversation prompt, not a permission reply.
+Resolve OpenCode permission requests in the visible TUI, not with a callback.
+Daemon-mode AgentSession `/input` sends a conversation prompt; terminal-mode
+`/input` types into the TUI and may interact with its current prompt.
 
 ## Layout
 

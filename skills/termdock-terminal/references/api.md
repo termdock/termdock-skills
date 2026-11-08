@@ -53,7 +53,11 @@ For `peer:terminal-create`, call the local tool without a remote routing context
 
 Both endpoints use the existing Terminal API bearer-token validation and enabled gate. Because the registry holds tools from both scope domains, a service token must hold **both** `terminal` and `agent-session` scopes; a token with only one (for example the read-only MCP adapter's `terminal`-only token) gets `403 FORBIDDEN_SCOPE`. Tokens minted by the CLI and tokens created without `scopes` hold both. There are no per-tool scope checks beyond that: the tool decides whether the operation is allowed. Keep it on loopback; never expose it through the webhook tunnel.
 
-Responses use the existing HTTP ToolResult conversion: `{success:true,data}` or `{success:false,error:{code,message}}`. Known terminal errors, including a recognized `errorCode` from the registry or tool, retain their HTTP status; validation errors return `400 INVALID_TOOL_INPUT`; an unknown tool name returns `404 TOOL_NOT_FOUND`. A refusal the tool declares as caller-actionable returns `409` with the tool's own code in `error.code` (for example `git:worktree-remove` answering `WORKTREE_IN_USE`, `WORKTREE_DIRTY` or `WORKTREE_NEEDS_ACK`); retrying the same request never succeeds, so change the input or clear what blocks it. Other errors without a recognized terminal code return `500 TOOL_CALL_FAILED`, preserving the registry/tool error message. An unavailable registry returns `503 TOOL_RUNTIME_UNAVAILABLE`. The existing 1 MiB request-body limit applies. There is no new input/result adaptation or tool-specific authorization in this route. Tools requiring a renderer caller, such as `peer:host-terminal-view-intents`, return their own rejection. Calls are unary, not event subscriptions; the generic endpoint does not provide renderer cancellation/progress channels.
+Agent browser operations are **disabled** in this build, regardless of discovery or the Terminal API switch. A future enablement requires trusted-desktop consent to a service-token principal, one local workspace, one surface, named actions and a TTL of at most one hour; the shared desktop HTTP token cannot receive consent. Rotation, revocation, expiry, workspace replacement, surface close, host reset and shutdown invalidate grants. HTTP callers cannot grant or inspect their own access. Everyone sharing a service token shares its authority. Browser panels share one persistent profile across workspaces and restarts; operations can act as the signed-in user and local HTML may load nearby files. Never blindly retry an unknown outcome. Create waits for a trusted guest and any initial local-page load. Close revokes access and waits for destruction; timeout is `BROWSER_CLEANUP_FAILED`.
+
+The generic tool route registers `browser:snapshot`, `browser:click`, `browser:type`, `browser:fill`, `browser:get-text`, `browser:screenshot`, and `browser:wait`. All take `{workspaceId,browserSurfaceId}`. Snapshot optionally takes `documentGeneration`, `maxNodes` (1–500, default 200), and `maxChars` (256–32000, default 16000), and returns bounded main-frame nodes and opaque refs. Other operations require `documentGeneration`; click/type/fill and element waits additionally require `elementRef`. Type takes 1–16384 characters, fill 0–16384. Get-text accepts optional `elementRef` and `maxChars` (1–32000). Screenshot accepts `format: "png"` and is limited to a visible viewport and 2 MiB. Wait accepts `condition: "ready"|"visible"|"hidden"|"text"`; all except ready need a ref, and text also needs `text`. `timeoutMs` defaults to 10000, max 30000, including queue time. A stale document or replaced node must be observed again with snapshot, never replaced by a same-selector target. DOM actions are not trusted keyboard or mouse events; screenshot can contain sensitive information. `system:identify` omits new browser metadata for unauthorized HTTP callers and supplies a reason. The URL omits userinfo, query and fragment; title is control-stripped and bounded, but both may still be sensitive.
+
+Responses use the existing HTTP ToolResult conversion: `{success:true,data}` or `{success:false,error:{code,message,details?}}`. Browser domain codes retain their HTTP status, including `409 BROWSER_ABORTED`, `410 BROWSER_SURFACE_CLOSED`, `500 BROWSER_CLEANUP_FAILED` and `504 BROWSER_TIMEOUT`. Optional `details` may contain `outcome` (`not-started`, `applied`, or `unknown`) and generation fields when available. An `unknown` outcome is not permission to retry; observe before deciding on another action. The CLI retains text errors and does not expose `details` as JSON; use HTTP for machine-readable details. Known terminal errors, including a recognized `errorCode` from the registry or tool, retain their HTTP status; validation errors return `400 INVALID_TOOL_INPUT`; an unknown tool name returns `404 TOOL_NOT_FOUND`. A refusal the tool declares as caller-actionable returns `409` with the tool's own code in `error.code` (for example `git:worktree-remove` answering `WORKTREE_IN_USE`, `WORKTREE_DIRTY` or `WORKTREE_NEEDS_ACK`); retrying the same request never succeeds, so change the input or clear what blocks it. Other errors without a recognized terminal code return `500 TOOL_CALL_FAILED`, preserving the registry/tool error message. An unavailable registry returns `503 TOOL_RUNTIME_UNAVAILABLE`. The existing 1 MiB request-body limit applies. There is no new input/result adaptation or tool-specific authorization in this route. Tools requiring a renderer caller, such as `peer:host-terminal-view-intents`, return their own rejection. Calls are unary, not event subscriptions; the generic endpoint does not provide renderer cancellation/progress channels.
 
 ```bash
 curl -s -H "Authorization: Bearer $TERMINAL_API_TOKEN" \
@@ -233,9 +237,24 @@ terminal; it is distinct from the terminal session and its PTY.
 
 `resolve` returns that conversation id in its `sessionId` field, and `attach` accepts either form. Every other path above addresses a single run, so pass the `sessionId` that create or attach returned. Resolving and then calling `GET /:id` with the resolved id gives you a 404.
 
-For OpenCode interactive sessions, `waiting-permission` requires a decision in
-the visible OpenCode TUI. `/input` sends a conversation prompt and does not
-reply to the permission request. Do not treat an accepted prompt as approval.
+OpenCode normally uses daemon HTTP and SSE (`metadata.sdkFamily` is
+`opencode-http-v1`). If the daemon or initial event stream is unavailable before
+the first prompt, it can launch the TUI in terminal mode instead
+(`opencode-terminal-v1`): the run has a local id, screen-derived status, and
+no cross-process attach by that id. Screen detection is best-effort; an
+unrecognized screen does not prevent ordinary prompt input, and does not prove
+completion. Structured callbacks require a recognized non-permission prompt.
+A recognized startup permission prompt must be handled by a person: if it remains,
+creation fails but the terminal stays open and the first prompt is not sent.
+Recovery of the daemon does not convert an existing terminal-mode run.
+The terminal closes when the TUI exits or cannot start, which ends the run.
+After the user closes a daemon-mode terminal, `/input` fails until you `attach` again.
+
+Resolve `waiting-permission` in the visible OpenCode TUI, not with a callback.
+Daemon-mode `/input` sends a conversation prompt, not a permission reply.
+Terminal-mode `/input` types into the TUI and can affect its current prompt.
+Closing a managed daemon-mode terminal starts one best-effort interrupt; a failed
+or timed-out interrupt is logged and the daemon turn may still be running.
 
 ### External monitor callbacks
 
