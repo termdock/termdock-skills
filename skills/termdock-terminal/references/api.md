@@ -374,15 +374,20 @@ The CLI prints the unwrapped `data`, not this envelope. `session output --follow
 
 Full request and response shapes, including the settings that gate the API, are in `docs/ref/api/TERMINAL-API.md` in the Termdock repository.
 
-## Live Prompt library schedules (1.22.0)
+## Prompt library schedules
 
 `PUT /api/terminal/sessions/:id/keepalive` accepts
 `{"rule":{"id":"review","enabled":true,"schedule":{"kind":"daily","time":"09:00"},"message":"","promptRef":{"slug":"review","scope":"project"}}}`.
 The reference is resolved again at each fire using the target workspace. Use
 `global` for a global entry; project references require a local target workspace.
+Saving an enabled rule approves the current content revision. If it changes, or
+an older saved rule has no revision, scheduled injection stops and the rule
+reports `contentChanged: true`; review the prompt and save the enabled rule
+again to reapprove. The verified snapshot is the content that is injected.
 Do not combine nonempty `message` and `promptRef`, or schedule prompts containing
-variables. Deleted/unreadable/unsupported prompts skip the slot rather than
-falling back to stale text. Existing screen and typing interlocks still apply.
+variables. Deleted or unreadable prompts skip the slot rather than falling back
+to stale text; newly invalid content stops for reapproval. Existing screen and
+typing interlocks still apply.
 The API also accepts `{"kind":"once","atMs":<future epoch milliseconds>}`.
 
 ## Local terminal ownership (`persistent-term-*`)

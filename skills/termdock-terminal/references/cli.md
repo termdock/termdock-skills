@@ -140,6 +140,9 @@ submitted. Durations need a unit (`90s`, `30m`, `2h`); a bare number is rejected
 | `--disabled` | Saves the rule without arming it |
 
 All three print the rule list after the change, with `nextFireAt` per rule.
+For a `promptRef` rule created through the HTTP API, `contentChanged: true`
+means scheduled injection stopped; review the prompt and save the enabled rule
+again through the API to reapprove it.
 Scheduling onto a crashed or ended session is refused. Set it on the session
 that should be woken, not on your own.
 
