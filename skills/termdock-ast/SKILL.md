@@ -2,8 +2,8 @@
 name: termdock-ast
 displayName: Termdock AST
 description: Queries AST index to find symbol locations, file dependencies, callers, and impact analysis. Use when user asks where is X, who calls X, what depends on X, or before refactoring. Skip when user provides exact file path.
-version: 7
-minAppVersion: 1.25.0
+version: 8
+minAppVersion: 1.27.0
 ---
 
 # Termdock AST API
@@ -70,6 +70,8 @@ curl 'http://localhost:3033/api/graph/deps?file=src/path/to/file.ts&workspace=<w
 ```
 
 Returns: imports (what this file uses) and exports (what it provides)
+
+Each import's `spec` is the original module string. `resolvedFile` is the absolute file path from the index's shared module resolver, or `null` when it cannot resolve to a file. Non-relative imports such as aliases can also resolve to a file.
 
 ### 3. Who Calls This?
 ```bash
