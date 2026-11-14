@@ -26,7 +26,7 @@ Enqueue returns `{accepted:true,dispatch:record}` inside the normal `{success,da
 
 `accepted` means admission only. `submitted` means the Enter write was confirmed, not that the agent started or the task succeeded. `outcome` is `unknown`; existing provider `subtype: "success"` is not task-success evidence. Next-item readiness uses the verified signal classifier, not idle screen status: permission, password, question and selection prompts and unsubmitted human input never open the queue. Each message is independent; no Ctrl+C or auto-approval is added.
 
-Only modes marked supported by `resolveDispatchSignalSupport()` auto-send: local macOS App-owned claude/codex with transcript facts and a readable headless composer. Missing facts or unverified providers, broker ownership, Linux/Windows and remote modes do not acquire a writer. Unsupported admitted modes remain `queued` with `blockReason: "unsupported-signal"`, then expire; peer/SSH admission without local authority returns `CAPABILITY_UNAVAILABLE`, never local fallback. Initial transcript resolution may be unavailable until a human first turn creates the source. A completed turn without a fresh composer observation does not release the next item.
+Only modes marked supported by `resolveDispatchSignalSupport()` auto-send: local macOS App-owned or broker-owned claude/codex with transcript facts and a readable headless composer. Missing facts or unverified providers, Linux/Windows and remote modes do not acquire a writer. Unsupported admitted modes remain `queued` with `blockReason: "unsupported-signal"`, then expire; peer/SSH admission without local authority returns `CAPABILITY_UNAVAILABLE`, never local fallback. Initial transcript resolution may be unavailable until a human first turn creates the source. A completed turn without a fresh composer observation does not release the next item.
 
 Queue timeout is required, 1–86,400,000 ms. Limits remain the shared dispatch defaults: 32 queued/session, 256 queued/App, 64 KiB UTF-8/payload, 4 MiB unsent payload, 1024 records, ended records retained at most 24 hours. Queue timeout never kills submitted work. Cancel only guarantees cancellation before `dispatching`; it does not interrupt the terminal. Cancelling a change observer does not cancel the dispatch.
 
@@ -227,7 +227,7 @@ terminal; it is distinct from the terminal session and its PTY.
 | `GET` | `/api/agent-sessions/:id/rendered` | The rendered conversation view |
 | `GET` | `/api/agent-sessions/:id/rendered/stream` | That view as a stream |
 | `POST` | `/api/agent-sessions/:id/input` | Send a message |
-| `POST` | `/api/agent-sessions/:id/callbacks` | Deliver a structured external event to an existing agent session |
+| `POST` | `/api/agent-sessions/:id/callbacks` | Deliver a structured external event to an AgentSession or confirmed terminal agent |
 | `POST` | `/api/agent-sessions/:id/interrupt` | Interrupt |
 | `POST` | `/api/agent-sessions/:id/restart` | Restart |
 | `DELETE` | `/api/agent-sessions/:id` | Kill |
@@ -259,11 +259,13 @@ or timed-out interrupt is logged and the daemon turn may still be running.
 ### External monitor callbacks
 
 `POST /api/agent-sessions/:id/callbacks` accepts an existing AgentSession id,
-its terminal id, or a unique tab name. A shell-only terminal returns
-`404 SESSION_NOT_FOUND`; the endpoint never attaches an agent or falls back to
-raw PTY input. Ambiguous agent associations return
+terminal id, or a unique tab name. A terminal without a registered AgentSession
+must have confirmed local macOS claude/codex dispatch signals, including for
+broker-owned terminals. Shells, unknown providers, unsupported platforms and
+remote terminals are rejected with a reason; the endpoint never attaches an
+agent or falls back to raw PTY input. Ambiguous agent associations return
 `409 AGENT_SESSION_CALLBACK_CONFLICT`. Tool Runtime callers use
-`agent-session:callback` with the canonical AgentSession `sessionId`.
+`agent-session:callback` with the AgentSession or terminal `sessionId`.
 
 ```json
 {
@@ -279,13 +281,16 @@ raw PTY input. Ambiguous agent associations return
 `metadata` are optional. The top-level object rejects unknown fields. Success
 returns `{ "success": true, "data": { "sessionId": "...", "deliveryId": "...", "createdAt": "..." } }`.
 Each call gets a new delivery id, even when `dedupeKey` repeats. The receipt
-acknowledges the provider send, not completion of the agent's work; it is not a
+acknowledges provider send or terminal submission, not completion of the agent's work; it is not a
 durable delivery record.
 
-Callbacks share the ordinary per-session send sequence and dispatch cap. An
-interactive agent receives the event at its turn-ready boundary, without an
-interrupt or answering a permission prompt. Metadata stays structured until
-the provider adapter renders a `termdock.agent-callback.v1` envelope. A timeout
+Registered AgentSessions use their normal send sequence and dispatch cap.
+Unregistered terminals use the existing dispatch queue and submit sequence,
+waiting up to 180 seconds for submission. The rendered envelope must fit the
+dispatch payload limit of 64 KiB; transcript facts may be unavailable until after
+a human first turn. An interactive agent receives the event at its turn-ready
+boundary, without an interrupt or answering a permission prompt. The event is
+rendered as a `termdock.agent-callback.v1` envelope. A timeout
 can leave delivery uncertain, so reconcile before retrying. Termdock does not
 deduplicate, merge, or automatically retry callbacks. `source`, `eventKind`,
 `dedupeKey`, and `metadata` are untrusted collaboration data, not authenticated

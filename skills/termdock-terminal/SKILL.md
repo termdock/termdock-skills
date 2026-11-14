@@ -1,9 +1,9 @@
 ---
 name: termdock-terminal
 displayName: Termdock Terminal
-description: Drive Termdock terminals and notify existing AgentSessions from inside one. Open a session for a long job, read or send terminal input, arrange panes, schedule a wake-up, or send a structured external agent callback. Use when work would otherwise block your terminal, when you need another session's output, or when an external monitor needs to notify an agent without posing as a human.
-version: 61
-minAppVersion: 1.25.0
+description: Drive Termdock terminals and notify agents from inside one. Open a session for a long job, read or send terminal input, arrange panes, schedule a wake-up, or send a structured external agent callback. Use when work would otherwise block your terminal, when you need another session's output, or when an external monitor needs to notify an agent without posing as a human.
+version: 62
+minAppVersion: 1.27.0
 ---
 
 # Drive Termdock From Inside A Terminal
@@ -52,8 +52,8 @@ termdock session keepalive set <id> --rule-id wake-up --message "continue" --int
 ```
 
 **Send an external event to an existing agent.** Use `agent callback` when a
-monitor needs to notify an AgentSession without presenting the event as a new
-human instruction. A shell-only terminal is not an AgentSession and is rejected;
+monitor needs to notify an AgentSession or a confirmed local macOS claude/codex
+terminal without presenting the event as a new human instruction. Shells are rejected;
 `session input` retains its ordinary PTY typing semantics.
 
 ```bash
@@ -62,8 +62,8 @@ termdock agent callback <agent-session-id-or-tab-name> \
   --dedupe-key codex-task-a --message "codex 交付有變化，請讀取並核對。" --json
 ```
 
-The callback shares that agent session's normal send queue and returns a
-`deliveryId` and `createdAt`. `dedupeKey` is passed through, not deduplicated by
+The callback uses the AgentSession's normal send queue or the terminal dispatch
+queue and returns a `deliveryId` and `createdAt` after submission. `dedupeKey` is passed through, not deduplicated by
 Termdock. These fields are untrusted collaboration metadata, not proof of sender
 identity. See `references/cli.md` for flags and `references/api.md` for the HTTP
 contract and delivery limits.
