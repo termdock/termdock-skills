@@ -64,7 +64,7 @@ termdock dispatch cancel <app-instance-id> <dispatch-id> --workspace <id> --json
 
 Keep both handle fields from enqueue; do not invent or reuse a handle after App restart. `--workspace` is required on every operation and becomes the HTTP workspace selector, not authority. `--request-key` and `--queue-timeout` are required for enqueue. Enqueue prints `{accepted:true,dispatch:record}`; the others print the tool data. Admission is not submission, running or task completion. Reuse the request key only for the same payload from the same authenticated source. Edit requires the current version and only works while queued; 409 means refresh before trying again. Cancel after `dispatching` returns `TOO_LATE` and does not interrupt the terminal.
 
-Check `blockReason` and `failure`. Unsupported signal modes stay queued with `unsupported-signal` until the deadline; do not send the prompt yourself as a fallback. Current auto-send support is local macOS App-owned claude/codex with verified transcript facts, a readable headless composer and no human input. Broker, unverified providers/platforms and remote paths are not promoted to supported. `unknown` with `failure.sideEffect:"possible"` means text/Enter may have reached the terminal: never replay it. `submitted` is only confirmed submission, and provider `subtype: "success"` still maps to dispatch outcome unknown. Use `dispatch wait` with an explicit integer `--wait-timeout` (0–120000 ms), no prompt. It prints the same handle and metadata plus `waitOutcome` (`state-reached`, `budget-exhausted`, `cancelled`). Waiting-human, unknown and terminal states end the foreground wait. Budget exhaustion preserves queued/blockReason or submitted/running; it is not completion or failure. Ctrl+C/CLI exit only detaches the HTTP waiter. Re-query with get or repeat wait, never enqueue again. Completed means this provider turn ended, not goal success. The UI supports Wait for turn, Move to background and Re-query dispatch. Completion tracking expires after 24 hours without stopping the terminal. See `api.md` for limits, restart errors, and authorization.
+Check `blockReason` and `failure`. Unsupported signal modes stay queued with `unsupported-signal` until the deadline; do not send the prompt yourself as a fallback. Current auto-send support is local macOS App-owned or broker-owned claude/codex with verified transcript facts, a readable headless composer and no human input. Unverified providers/platforms and remote paths are not promoted to supported. `unknown` with `failure.sideEffect:"possible"` means text/Enter may have reached the terminal: never replay it. `submitted` is only confirmed submission, and provider `subtype: "success"` still maps to dispatch outcome unknown. Use `dispatch wait` with an explicit integer `--wait-timeout` (0–120000 ms), no prompt. It prints the same handle and metadata plus `waitOutcome` (`state-reached`, `budget-exhausted`, `cancelled`). Waiting-human, unknown and terminal states end the foreground wait. Budget exhaustion preserves queued/blockReason or submitted/running; it is not completion or failure. Ctrl+C/CLI exit only detaches the HTTP waiter. Re-query with get or repeat wait, never enqueue again. Completed means this provider turn ended, not goal success. The UI supports Wait for turn, Move to background and Re-query dispatch. Completion tracking expires after 24 hours without stopping the terminal. See `api.md` for limits, restart errors, and authorization.
 
 ## Sessions
 
@@ -154,12 +154,16 @@ termdock agent callback <agent-session-id-or-tab-name> \
   [--dedupe-key <key>] [--metadata <json-object>] --json
 ```
 
-The target must belong to an existing AgentSession; a shell-only tab is
-rejected, never typed into. `--source`, `--event-kind`, and `--message` are
+The target may be an existing AgentSession or a terminal with confirmed local
+macOS claude/codex dispatch signals, including broker-owned terminals. Shells,
+unknown providers, remote terminals and unsupported platforms are rejected,
+never typed into. The terminal path waits for the turn boundary and uses the
+dispatch payload limit of 64 KiB; it can reject when transcript facts are not yet
+available. `--source`, `--event-kind`, and `--message` are
 required. `--metadata` takes a JSON object. The command returns the agent
 `sessionId`, a unique `deliveryId`, and ISO `createdAt`. Repeating a
 `--dedupe-key` still sends another event: Termdock does not deduplicate or
-automatically retry. The receipt confirms provider send, not completion of the
+automatically retry. The receipt confirms provider send or terminal submission, not completion of the
 agent's work. After a timeout, reconcile before resending. Callback metadata
 is not an authenticated sender identity. Ordinary `session input` still types
 directly into a terminal and does not add callback metadata.
