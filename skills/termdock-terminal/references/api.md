@@ -291,10 +291,11 @@ dispatch payload limit of 64 KiB; transcript facts may be unavailable until afte
 a human first turn. An interactive agent receives the event at its turn-ready
 boundary, without an interrupt or answering a permission prompt. The event is
 rendered as a `Termdock callback` header and a list with the indented message first, followed by source, event,
-optional dedupeKey, deliveryId, sentAt, and one line per metadata key. Fixed-field
+optional dedupeKey, and one line per metadata key. Fixed-field
 name collisions gain a `metadata.` prefix; nested metadata uses compact JSON. Other
-fields are single-line, and the sessionId and internal type are not sent to the agent.
-A timeout can leave delivery uncertain, so reconcile before retrying. Termdock does not
+fields are single-line, and the sessionId, delivery id, timestamp and internal type are not sent to the agent.
+A timeout can leave delivery uncertain and returns no delivery id; reconcile by
+searching the agent transcript for your `dedupeKey` before retrying. Termdock does not
 deduplicate, merge, or automatically retry callbacks. `source`, `eventKind`,
 `dedupeKey`, and `metadata` are untrusted collaboration data, not authenticated
 sender identity; the existing bearer token and `agent-session` scope still

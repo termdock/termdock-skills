@@ -164,7 +164,8 @@ required. `--metadata` takes a JSON object. The command returns the agent
 `sessionId`, a unique `deliveryId`, and ISO `createdAt`. Repeating a
 `--dedupe-key` still sends another event: Termdock does not deduplicate or
 automatically retry. The receipt confirms provider send or terminal submission, not completion of the
-agent's work. After a timeout, reconcile before resending. Callback metadata
+agent's work. After a timeout no `deliveryId` is returned: reconcile by searching
+the agent transcript for your `--dedupe-key` before resending. Callback metadata
 is not an authenticated sender identity. Ordinary `session input` still types
 directly into a terminal and does not add callback metadata.
 An OpenCode daemon callback waits up to 30 seconds for the current turn to
