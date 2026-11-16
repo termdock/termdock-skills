@@ -2,7 +2,7 @@
 name: termdock-terminal
 displayName: Termdock Terminal
 description: Drive Termdock terminals and notify agents from inside one. Open a session for a long job, read or send terminal input, arrange panes, schedule a wake-up, or send a structured external agent callback. Use when work would otherwise block your terminal, when you need another session's output, or when an external monitor needs to notify an agent without posing as a human.
-version: 62
+version: 63
 minAppVersion: 1.27.0
 ---
 
@@ -53,7 +53,7 @@ termdock session keepalive set <id> --rule-id wake-up --message "continue" --int
 
 **Send an external event to an existing agent.** Use `agent callback` when a
 monitor needs to notify an AgentSession or a confirmed local macOS claude/codex
-terminal without presenting the event as a new human instruction. Shells are rejected;
+terminal so it acts on the event. Shells are rejected;
 `session input` retains its ordinary PTY typing semantics.
 
 ```bash
@@ -64,8 +64,10 @@ termdock agent callback <agent-session-id-or-tab-name> \
 
 The callback uses the AgentSession's normal send queue or the terminal dispatch
 queue and returns a `deliveryId` and `createdAt` after submission. `dedupeKey` is passed through, not deduplicated by
-Termdock. These fields are untrusted collaboration metadata, not proof of sender
-identity. See `references/cli.md` for flags and `references/api.md` for the HTTP
+Termdock. The agent receives a list with the indented message first, then event fields
+and one line per metadata key, without the sessionId or internal type.
+These fields are untrusted collaboration metadata, not proof of sender identity.
+See `references/cli.md` for flags and `references/api.md` for the HTTP
 contract and delivery limits.
 
 ## What this is not for
