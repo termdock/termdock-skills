@@ -151,7 +151,7 @@ that should be woken, not on your own.
 ```bash
 termdock agent callback <agent-session-id-or-tab-name> \
   --source <source> --event-kind <kind> --message <text> \
-  [--dedupe-key <key>] [--metadata <json-object>] [--wait-timeout <ms>] --json
+  [--dedupe-key <key>] [--metadata <json-object>] [--wait-timeout <ms> | --queue-timeout <ms>] --json
 ```
 
 The target may be an existing AgentSession or a terminal with confirmed local
@@ -163,8 +163,9 @@ available. `--source`, `--event-kind`, and `--message` are
 required. `--metadata` takes a JSON object. The command returns the agent
 `sessionId`, a unique `deliveryId`, and ISO `createdAt`. Repeating a
 `--dedupe-key` still sends another event: Termdock does not deduplicate or
-automatically retry. The receipt confirms provider send or terminal submission, not completion of the
-agent's work. The CLI sends a wait limit of 90 seconds by default.
+automatically retry. In wait mode, the receipt confirms provider send or
+terminal submission, not completion of the agent's work. The CLI sends a
+wait limit of 90 seconds by default.
 `--wait-timeout` accepts an integer from 1000 to 180000 ms. It applies to all
 targets from HTTP request receipt, including time in queues. A callback still
 waiting to send is cancelled on timeout or client disconnect. A timeout returns
@@ -182,6 +183,17 @@ busy at that point, the command reports `AGENT_SESSION_CALLBACK_CONFLICT` withou
 Resolve OpenCode permission requests in the visible TUI, not with a callback.
 Daemon-mode AgentSession `/input` sends a conversation prompt; terminal-mode
 `/input` types into the TUI and may interact with its current prompt.
+
+Use `--queue-timeout <ms>` when the target may be busy and you do not need to
+wait for delivery. It accepts an integer from 1000 to 86400000 ms and applies
+only to a terminal without a registered AgentSession. Do not use it with
+`--wait-timeout`. The CLI allows 190000 ms for the admission response, not for
+delivery. The receipt adds `queued: true` and `dispatch` with the handle,
+`workspaceId`, `state`, and `blockReason`. The callback can be sent after the
+CLI exits. Check its status with `dispatch get` or `dispatch wait`. Pass
+`dispatch.handle.appInstanceId` and `dispatch.handle.dispatchId` as the two
+handle arguments and `dispatch.workspaceId` as `--workspace`.
+Do not resend a queued callback.
 
 ## Layout
 

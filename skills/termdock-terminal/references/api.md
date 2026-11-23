@@ -280,12 +280,13 @@ the same request fields.
 ```
 
 `source`, `eventKind`, and `message` are required. `dedupeKey` and the JSON-object
-`metadata` are optional. `waitTimeoutMs` is an optional request setting, not
-part of the message. It accepts integers from 1000 to 180000 ms and defaults
+`metadata` are optional. `waitTimeoutMs` and `queueTimeoutMs` are optional
+request settings, not part of the message. Do not use both.
+In wait mode, `waitTimeoutMs` accepts integers from 1000 to 180000 ms and defaults
 to 180000 ms. The limit applies to every target, from HTTP request receipt
 through resolution, queueing, and provider send or terminal submission. An
 invalid value returns `400 INVALID_AGENT_SESSION_CALLBACK`. The top-level object
-rejects unknown fields. Success
+rejects unknown fields. In wait mode, success
 returns `{ "success": true, "data": { "sessionId": "...", "deliveryId": "...", "createdAt": "..." } }`.
 Each call gets a new delivery id, even when `dedupeKey` repeats. The receipt
 acknowledges provider send or terminal submission, not completion of the agent's work; it is not a
@@ -300,8 +301,8 @@ rendered as a `Termdock callback` header and a list with the indented message fi
 optional dedupeKey, and one line per metadata key. Fixed-field
 name collisions gain a `metadata.` prefix; nested metadata uses compact JSON. Other
 fields are single-line, and the sessionId, delivery id, timestamp and internal type are not sent to the agent.
-A timeout or client disconnect cancels a callback still waiting to send. On
-timeout, the API returns
+In wait mode, a timeout or client disconnect cancels a callback still waiting
+to send. On timeout, the API returns
 `504` and `{ "success": false, "error": { "code": "AGENT_SESSION_DISPATCH_TIMEOUT", "message": "..." } }`.
 The error adds `blockReason` if terminal dispatch had a known queue blocker. If the
 error says delivery may have occurred, search the agent transcript for your
@@ -315,6 +316,21 @@ For OpenCode daemon sessions, the idle wait ends after at most 30 seconds
 and uses only the time left in the callback limit. If the run is still busy
 at that point, the API returns `409 AGENT_SESSION_CALLBACK_CONFLICT` without
 failing or interrupting the run. Retry after it becomes idle.
+
+Use queue mode when the target may be busy and you do not need to wait for
+delivery. Set `queueTimeoutMs` to an integer from 1000 to 86400000 ms. Termdock
+has 180000 ms from request arrival to check and enqueue the callback. The queue
+timeout starts at enqueue. Invalid limits, both timeout settings, or a
+registered AgentSession target in queue mode return
+`400 INVALID_AGENT_SESSION_CALLBACK`.
+
+Queue mode returns as soon as the callback is in the dispatch queue. The
+receipt adds `queued: true` and
+`dispatch: { handle: { appInstanceId, dispatchId }, workspaceId, state, blockReason }`.
+It confirms enqueue, not submission. The callback can be sent after the
+request ends. Check with `dispatch get` or `dispatch wait` using both returned
+handle fields and the returned workspace id. Service tokens need the
+`terminal` scope to read dispatch status. Do not resend a queued callback.
 
 `/rendered` returns the full retained view. `/rendered/stream` frames are each capped
 at 56 KiB: when the view is bigger, the frame drops the oldest entries first and
