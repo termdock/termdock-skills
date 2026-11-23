@@ -151,7 +151,7 @@ that should be woken, not on your own.
 ```bash
 termdock agent callback <agent-session-id-or-tab-name> \
   --source <source> --event-kind <kind> --message <text> \
-  [--dedupe-key <key>] [--metadata <json-object>] --json
+  [--dedupe-key <key>] [--metadata <json-object>] [--wait-timeout <ms>] --json
 ```
 
 The target may be an existing AgentSession or a terminal with confirmed local
@@ -164,13 +164,21 @@ required. `--metadata` takes a JSON object. The command returns the agent
 `sessionId`, a unique `deliveryId`, and ISO `createdAt`. Repeating a
 `--dedupe-key` still sends another event: Termdock does not deduplicate or
 automatically retry. The receipt confirms provider send or terminal submission, not completion of the
-agent's work. After a timeout no `deliveryId` is returned: reconcile by searching
-the agent transcript for your `--dedupe-key` before resending. Callback metadata
-is not an authenticated sender identity. Ordinary `session input` still types
+agent's work. The CLI sends a wait limit of 90 seconds by default.
+`--wait-timeout` accepts an integer from 1000 to 180000 ms. It applies to all
+targets from HTTP request receipt, including time in queues. A callback still
+waiting to send is cancelled on timeout or client disconnect. A timeout returns
+`AGENT_SESSION_DISPATCH_TIMEOUT` in the single JSON error line on stdout, with
+`error.blockReason` (for example, `busy` or `typing`) when known. The CLI still
+prints a line to stderr. If the server has not answered 10 seconds after the
+wait limit, the CLI aborts the HTTP request and reports the timeout itself.
+If delivery may have occurred or the server did not answer, search the agent
+transcript for your `--dedupe-key` before resending. Callback metadata is not an
+authenticated sender identity. Ordinary `session input` still types
 directly into a terminal and does not add callback metadata.
 An OpenCode daemon callback waits up to 30 seconds for the current turn to
-finish; if it is still busy, the command reports
-`AGENT_SESSION_CALLBACK_CONFLICT` without interrupting that turn.
+finish, using only the time left in the callback limit. If the turn is still
+busy at that point, the command reports `AGENT_SESSION_CALLBACK_CONFLICT` without interrupting it.
 Resolve OpenCode permission requests in the visible TUI, not with a callback.
 Daemon-mode AgentSession `/input` sends a conversation prompt; terminal-mode
 `/input` types into the TUI and may interact with its current prompt.

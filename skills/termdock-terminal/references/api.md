@@ -265,7 +265,8 @@ broker-owned terminals. Shells, unknown providers, unsupported platforms and
 remote terminals are rejected with a reason; the endpoint never attaches an
 agent or falls back to raw PTY input. Ambiguous agent associations return
 `409 AGENT_SESSION_CALLBACK_CONFLICT`. Tool Runtime callers use
-`agent-session:callback` with the AgentSession or terminal `sessionId`.
+`agent-session:callback` with the AgentSession or terminal `sessionId` and
+the same request fields.
 
 ```json
 {
@@ -273,20 +274,25 @@ agent or falls back to raw PTY input. Ambiguous agent associations return
   "eventKind": "artifact-changed",
   "dedupeKey": "codex-task-a",
   "message": "codex 交付有變化，請讀取並核對。",
-  "metadata": { "artifact": "/tmp/codex-task-a/REPORT.md" }
+  "metadata": { "artifact": "/tmp/codex-task-a/REPORT.md" },
+  "waitTimeoutMs": 90000
 }
 ```
 
 `source`, `eventKind`, and `message` are required. `dedupeKey` and the JSON-object
-`metadata` are optional. The top-level object rejects unknown fields. Success
+`metadata` are optional. `waitTimeoutMs` is an optional request setting, not
+part of the message. It accepts integers from 1000 to 180000 ms and defaults
+to 180000 ms. The limit applies to every target, from HTTP request receipt
+through resolution, queueing, and provider send or terminal submission. An
+invalid value returns `400 INVALID_AGENT_SESSION_CALLBACK`. The top-level object
+rejects unknown fields. Success
 returns `{ "success": true, "data": { "sessionId": "...", "deliveryId": "...", "createdAt": "..." } }`.
 Each call gets a new delivery id, even when `dedupeKey` repeats. The receipt
 acknowledges provider send or terminal submission, not completion of the agent's work; it is not a
 durable delivery record.
 
-Registered AgentSessions use their normal send sequence and dispatch cap.
-Unregistered terminals use the existing dispatch queue and submit sequence,
-waiting up to 180 seconds for submission. The rendered envelope must fit the
+Registered AgentSessions use their normal send sequence and dispatch cap,
+bounded by the time left in the callback limit. For unregistered terminals, the rendered envelope must fit the
 dispatch payload limit of 64 KiB; transcript facts may be unavailable until after
 a human first turn. An interactive agent receives the event at its turn-ready
 boundary, without an interrupt or answering a permission prompt. The event is
@@ -294,17 +300,21 @@ rendered as a `Termdock callback` header and a list with the indented message fi
 optional dedupeKey, and one line per metadata key. Fixed-field
 name collisions gain a `metadata.` prefix; nested metadata uses compact JSON. Other
 fields are single-line, and the sessionId, delivery id, timestamp and internal type are not sent to the agent.
-A timeout can leave delivery uncertain and returns no delivery id; reconcile by
-searching the agent transcript for your `dedupeKey` before retrying. Termdock does not
+A timeout or client disconnect cancels a callback still waiting to send. On
+timeout, the API returns
+`504` and `{ "success": false, "error": { "code": "AGENT_SESSION_DISPATCH_TIMEOUT", "message": "..." } }`.
+The error adds `blockReason` if terminal dispatch had a known queue blocker. If the
+error says delivery may have occurred, search the agent transcript for your
+`dedupeKey` before retrying. Termdock does not
 deduplicate, merge, or automatically retry callbacks. `source`, `eventKind`,
 `dedupeKey`, and `metadata` are untrusted collaboration data, not authenticated
 sender identity; the existing bearer token and `agent-session` scope still
 control access. Generic terminal `/input` keeps its existing behavior.
 
-For OpenCode daemon sessions, waiting for the current turn to become idle is
-capped at 30 seconds. A still-busy run returns
-`409 AGENT_SESSION_CALLBACK_CONFLICT` without failing or interrupting that run;
-retry after it becomes idle.
+For OpenCode daemon sessions, the idle wait ends after at most 30 seconds
+and uses only the time left in the callback limit. If the run is still busy
+at that point, the API returns `409 AGENT_SESSION_CALLBACK_CONFLICT` without
+failing or interrupting the run. Retry after it becomes idle.
 
 `/rendered` returns the full retained view. `/rendered/stream` frames are each capped
 at 56 KiB: when the view is bigger, the frame drops the oldest entries first and
