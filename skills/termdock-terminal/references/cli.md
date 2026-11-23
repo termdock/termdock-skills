@@ -55,7 +55,7 @@ termdock workspace list --json    # workspace ids, which is what session create 
 
 ```bash
 termdock dispatch enqueue <session-id-or-name> "next message" --workspace <id> --request-key <unique-key> --queue-timeout 60000 --json
-termdock dispatch list --workspace <id> [--session <exact-id>] --json
+termdock dispatch list --workspace <id> [--session <id-or-name>] --json
 termdock dispatch get <app-instance-id> <dispatch-id> --workspace <id> --json
 termdock dispatch wait <app-instance-id> <dispatch-id> --workspace <id> --wait-timeout 120000 --json
 termdock dispatch edit <app-instance-id> <dispatch-id> "edited message" --workspace <id> --expected-version <n> --json

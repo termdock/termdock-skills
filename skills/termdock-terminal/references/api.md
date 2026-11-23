@@ -16,7 +16,7 @@ Dispatch tools are `terminal:dispatch-enqueue`, `terminal:dispatch-list`, `termi
 | Method | Endpoint | Input |
 | --- | --- | --- |
 | POST | `/api/terminal/dispatches` | `{target,requestKey,payload,queueTimeoutMs}` |
-| GET | `/api/terminal/dispatches` | Optional `sessionId` query, exact ID only |
+| GET | `/api/terminal/dispatches` | Optional `sessionId` query: a session ID or a unique terminal name, resolved the same way as the enqueue `target` |
 | GET | `/api/terminal/dispatches/:appInstanceId/:dispatchId` | Complete handle in the path |
 | PATCH | `/api/terminal/dispatches/:appInstanceId/:dispatchId` | `{expectedVersion,payload}` |
 | POST | `/api/terminal/dispatches/:appInstanceId/:dispatchId/cancel` | Empty body |
