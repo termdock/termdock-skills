@@ -55,7 +55,7 @@ termdock workspace list --json    # workspace ids, which is what session create 
 
 ```bash
 termdock dispatch enqueue <session-id-or-name> "next message" --workspace <id> --request-key <unique-key> --queue-timeout 60000 --json
-termdock dispatch list --workspace <id> [--session <exact-id>] --json
+termdock dispatch list --workspace <id> [--session <id-or-name>] --json
 termdock dispatch get <app-instance-id> <dispatch-id> --workspace <id> --json
 termdock dispatch wait <app-instance-id> <dispatch-id> --workspace <id> --wait-timeout 120000 --json
 termdock dispatch edit <app-instance-id> <dispatch-id> "edited message" --workspace <id> --expected-version <n> --json
@@ -64,7 +64,7 @@ termdock dispatch cancel <app-instance-id> <dispatch-id> --workspace <id> --json
 
 Keep both handle fields from enqueue; do not invent or reuse a handle after App restart. `--workspace` is required on every operation and becomes the HTTP workspace selector, not authority. `--request-key` and `--queue-timeout` are required for enqueue. Enqueue prints `{accepted:true,dispatch:record}`; the others print the tool data. Admission is not submission, running or task completion. Reuse the request key only for the same payload from the same authenticated source. Edit requires the current version and only works while queued; 409 means refresh before trying again. Cancel after `dispatching` returns `TOO_LATE` and does not interrupt the terminal.
 
-Check `blockReason` and `failure`. Unsupported signal modes stay queued with `unsupported-signal` until the deadline; do not send the prompt yourself as a fallback. Current auto-send support is local macOS App-owned claude/codex with verified transcript facts, a readable headless composer and no human input. Broker, unverified providers/platforms and remote paths are not promoted to supported. `unknown` with `failure.sideEffect:"possible"` means text/Enter may have reached the terminal: never replay it. `submitted` is only confirmed submission, and provider `subtype: "success"` still maps to dispatch outcome unknown. Use `dispatch wait` with an explicit integer `--wait-timeout` (0–120000 ms), no prompt. It prints the same handle and metadata plus `waitOutcome` (`state-reached`, `budget-exhausted`, `cancelled`). Waiting-human, unknown and terminal states end the foreground wait. Budget exhaustion preserves queued/blockReason or submitted/running; it is not completion or failure. Ctrl+C/CLI exit only detaches the HTTP waiter. Re-query with get or repeat wait, never enqueue again. Completed means this provider turn ended, not goal success. The UI supports Wait for turn, Move to background and Re-query dispatch. Completion tracking expires after 24 hours without stopping the terminal. See `api.md` for limits, restart errors, and authorization.
+Check `blockReason` and `failure`. Unsupported signal modes stay queued with `unsupported-signal` until the deadline; do not send the prompt yourself as a fallback. Current auto-send support is local macOS App-owned or broker-owned claude/codex with verified transcript facts, a readable headless composer and no human input. Unverified providers/platforms and remote paths are not promoted to supported. `unknown` with `failure.sideEffect:"possible"` means text/Enter may have reached the terminal: never replay it. `submitted` is only confirmed submission, and provider `subtype: "success"` still maps to dispatch outcome unknown. Use `dispatch wait` with an explicit integer `--wait-timeout` (0–120000 ms), no prompt. It prints the same handle and metadata plus `waitOutcome` (`state-reached`, `budget-exhausted`, `cancelled`). Waiting-human, unknown and terminal states end the foreground wait. Budget exhaustion preserves queued/blockReason or submitted/running; it is not completion or failure. Ctrl+C/CLI exit only detaches the HTTP waiter. Re-query with get or repeat wait, never enqueue again. Completed means this provider turn ended, not goal success. The UI supports Wait for turn, Move to background and Re-query dispatch. Completion tracking expires after 24 hours without stopping the terminal. See `api.md` for limits, restart errors, and authorization.
 
 ## Sessions
 
@@ -140,6 +140,9 @@ submitted. Durations need a unit (`90s`, `30m`, `2h`); a bare number is rejected
 | `--disabled` | Saves the rule without arming it |
 
 All three print the rule list after the change, with `nextFireAt` per rule.
+For a `promptRef` rule created through the HTTP API, `contentChanged: true`
+means scheduled injection stopped; review the prompt and save the enabled rule
+again through the API to reapprove it.
 Scheduling onto a crashed or ended session is refused. Set it on the session
 that should be woken, not on your own.
 
@@ -148,24 +151,49 @@ that should be woken, not on your own.
 ```bash
 termdock agent callback <agent-session-id-or-tab-name> \
   --source <source> --event-kind <kind> --message <text> \
-  [--dedupe-key <key>] [--metadata <json-object>] --json
+  [--dedupe-key <key>] [--metadata <json-object>] [--wait-timeout <ms> | --queue-timeout <ms>] --json
 ```
 
-The target must belong to an existing AgentSession; a shell-only tab is
-rejected, never typed into. `--source`, `--event-kind`, and `--message` are
+The target may be an existing AgentSession or a terminal with confirmed local
+macOS claude/codex dispatch signals, including broker-owned terminals. Shells,
+unknown providers, remote terminals and unsupported platforms are rejected,
+never typed into. The terminal path waits for the turn boundary and uses the
+dispatch payload limit of 64 KiB; it can reject when transcript facts are not yet
+available. `--source`, `--event-kind`, and `--message` are
 required. `--metadata` takes a JSON object. The command returns the agent
 `sessionId`, a unique `deliveryId`, and ISO `createdAt`. Repeating a
 `--dedupe-key` still sends another event: Termdock does not deduplicate or
-automatically retry. The receipt confirms provider send, not completion of the
-agent's work. After a timeout, reconcile before resending. Callback metadata
-is not an authenticated sender identity. Ordinary `session input` still types
+automatically retry. In wait mode, the receipt confirms provider send or
+terminal submission, not completion of the agent's work. The CLI sends a
+wait limit of 90 seconds by default.
+`--wait-timeout` accepts an integer from 1000 to 180000 ms. It applies to all
+targets from HTTP request receipt, including time in queues. A callback still
+waiting to send is cancelled on timeout or client disconnect. A timeout returns
+`AGENT_SESSION_DISPATCH_TIMEOUT` in the single JSON error line on stdout, with
+`error.blockReason` (for example, `busy` or `typing`) when known. The CLI still
+prints a line to stderr. If the server has not answered 10 seconds after the
+wait limit, the CLI aborts the HTTP request and reports the timeout itself.
+If delivery may have occurred or the server did not answer, search the agent
+transcript for your `--dedupe-key` before resending. Callback metadata is not an
+authenticated sender identity. Ordinary `session input` still types
 directly into a terminal and does not add callback metadata.
 An OpenCode daemon callback waits up to 30 seconds for the current turn to
-finish; if it is still busy, the command reports
-`AGENT_SESSION_CALLBACK_CONFLICT` without interrupting that turn.
+finish, using only the time left in the callback limit. If the turn is still
+busy at that point, the command reports `AGENT_SESSION_CALLBACK_CONFLICT` without interrupting it.
 Resolve OpenCode permission requests in the visible TUI, not with a callback.
 Daemon-mode AgentSession `/input` sends a conversation prompt; terminal-mode
 `/input` types into the TUI and may interact with its current prompt.
+
+Use `--queue-timeout <ms>` when the target may be busy and you do not need to
+wait for delivery. It accepts an integer from 1000 to 86400000 ms and applies
+only to a terminal without a registered AgentSession. Do not use it with
+`--wait-timeout`. The CLI allows 190000 ms for the admission response, not for
+delivery. The receipt adds `queued: true` and `dispatch` with the handle,
+`workspaceId`, `state`, and `blockReason`. The callback can be sent after the
+CLI exits. Check its status with `dispatch get` or `dispatch wait`. Pass
+`dispatch.handle.appInstanceId` and `dispatch.handle.dispatchId` as the two
+handle arguments and `dispatch.workspaceId` as `--workspace`.
+Do not resend a queued callback.
 
 ## Layout
 
@@ -237,15 +265,19 @@ text. See `api.md` for the reference payload and target-workspace rules.
 
 ## Local terminal ownership (`persistent-term-*`)
 
+`session list --json` and `session status <id> --json` may include `foregroundProcess` (the name of the program in the terminal's foreground, such as `claude`, `zsh` or `node`) and `cwd` (the shell's current directory, which follows `cd`). The OS reports both when you ask, for local shells only. The fields are missing for peer and SSH terminals, on Windows, and when the OS cannot report them; a missing field is not evidence of anything. A script run by an interpreter may show the interpreter name, for example `node` for `npm` on macOS. A reading may be up to 2.5 seconds old.
+
 `session list --json` and `session status <id> --json` may return `persistent.brokerBuild: {status, lastKnown}` for broker-owned sessions. `status` is `current`, `different`, or `unknown`; `different` is not a version ordering, and `lastKnown` marks a comparison confirmed before disconnect. Missing or unknown is not current. If `broker.listComplete` is false, `broker.queryErrorCode` is present, or listing fails for size, the list is incomplete, not zero. New broker-owned sessions use the app's authenticated broker build; older sessions stay with their holder. When `broker.admission.reason` is `old-broker-limit`, end unneeded old terminals and retry. Closing a tab may not end its terminal. Existing matching current brokers can still accept creates even if the retained old-owner count is over the limit.
+
+`session list --json` and `session status <id> --json` may include `persistent.createdAt` and `persistent.lastActivity` in epoch milliseconds. They mark broker creation and last PTY output. Older brokers omit both, and a terminal with no output omits `lastActivity`. Do not use `persistent.observedAt` as a substitute.
 
 - Local workspace create defaults to broker ownership on desktop, split panes, HTTP, CLI and Tool Runtime. Terminals keep running after App Quit; there is no user-facing persistent mode or special creation entry. Existing live App-owned processes are not migrated.
 - `terminal:create` and HTTP create accept `persistence?: "app" | "broker"`: omitted means automatic broker with silent App-owned fallback; `app` explicitly selects App-owned lifetime; `broker` requires the broker and reports failure rather than falling back. No new CLI flag is added.
 - Capability unavailable, blocked Windows Job, broker unreachable/incompatible or unsupported exact launch options fall back before a native effect. Custom env/cwd/shell, persisted logs and dimensions unsupported by an older broker retain the App-owned capability. Unknown sent-create outcomes never open a second shell. Remote/peer/SSH workspaces retain their remote owner.
 - The default create pipeline grants this Main the writer. Input/submit/key/interrupt/resize require that grant and fence stale queued calls; they never take over another client implicitly. Without a valid lease a write returns 409 `STALE_ATTACHMENT`, and rejected input is not retried. Keep-alive and submissions share the ordinary submit chain; `queueUntilReady` and agent submissions use existing readiness logic. CLI `session attach` remains the SSE/stdin bridge, not a broker writer grant.
 - Output uses the same bounded Main projection for renderer and agent reads: `raw` retains ANSI rows; `text`/`content` use App-owned normalization and chrome filtering. Numeric `cursor`/`nextCursor` are App-style line cursors: pass `nextCursor` to `--since` or SSE `since` for the next read. Clear, attachment rebuild or an expired history window returns `truncated:true`; resume from the returned cursor. `snapshotCursor` remains the separate broker source cursor. Follow/SSE and `wait-output` require this Main's attachment and end with `output.error` on takeover/detach (`STALE_ATTACHMENT`), broker disconnect (`BROKER_UNREACHABLE`) or session end (`SESSION_ENDED`, reported only after the retained output has been delivered). CLI follow writes that event in JSON mode and exits nonzero. Reads do not acquire or steal a writer. A session this Main is not attached to (taken over, detached or never attached) is read from a broker snapshot: whenever new output has arrived the line projection is rebuilt, so a `since` read returns the whole retained window with `truncated:true` instead of an increment. An unterminated last row is delivered as it stands; text that later completes that same row is not re-sent, as with App-owned terminals. `screen` still uses the shared headless projection and hash/window rules, with no incremental cursor semantics; `source=dom` remains unsupported. The default window is 50 lines; `ifHash` remains available.
-- Names resolve through the ordinary terminal name namespace. Unified protocol v1.1 supports authoritative writer-fenced rename, names up to 200 characters, shell process evidence, dimensions 500×100 and optional bounded error hints. Only v1.1/v1.0 are negotiated. v1.0 has no name/rename/process-evidence/error-message extensions and retains 240×100; new fields are stripped from old-client replies/events/deduplicated results. v1.1-only sessions require a compatible client; old broker rename returns `RENAME_UNSUPPORTED`.
-- Closing a desktop tab or `session destroy` terminates its shell and children and waits for process-tree acknowledgement. A `lost` session (its broker instance is gone) cannot be terminated; destroy only forgets it locally and returns `treeReaped:false, forgotten:true`. Quit/Cmd+R and explicit `terminal:detach` do not terminate them. There is no session-count cap. The broker warns at 192 MiB RSS and refuses new creation at 256 MiB (`RESOURCE_LIMIT`), without terminating existing work. PTY/process exhaustion returns `RESOURCE_LIMIT` with a readable recovery hint from a v1.1 broker; other spawn failures return `CAPABILITY_UNAVAILABLE`.
+- Names resolve through the ordinary terminal name namespace. Unified protocol v1.1 supports authoritative writer-fenced rename, names up to 200 characters, shell process evidence, dimensions 500×100 and optional bounded error hints. v1.0 has no name/rename/process-evidence/error-message extensions and retains 240×100; new fields are stripped from old-client replies/events/deduplicated results. v1.1-only sessions require a compatible client; old broker rename returns `RENAME_UNSUPPORTED`.
+- Closing a desktop tab or `session destroy` terminates its shell and children and waits for process-tree acknowledgement. A `lost` session (its broker instance is gone) cannot be terminated; destroy only forgets it locally and returns `treeReaped:false, forgotten:true`. Quit/Cmd+R and explicit `terminal:detach` do not terminate them. There is no session-count cap. The current broker warns at 128 MiB of `heapUsed + arrayBuffers` and refuses new creation at 192 MiB (`RESOURCE_LIMIT`), without terminating existing work; older brokers may use different thresholds. PTY/process exhaustion returns `RESOURCE_LIMIT` with a readable recovery hint from a v1.1 broker; other spawn failures return `CAPABILITY_UNAVAILABLE`.
 - Startup uses the one savedSessions/layout: living processes reconnect in their original pane/order; confirmed ended/missing processes rebuild with a NEW ID, saved history and keep-alive rules. Unreachable/incompatible broker panes stay in place for retry; other writers remain read-only until confirmed takeover. Manual `terminal:restore-persistent {sessionId}` is Tool Runtime only (no HTTP/CLI route), returns `{snapshot, broker, session?, errorCode?}` and does not accept caller cwd/shell or replay uncertain create. Existing App-owned snapshots retain snapshot-only restore.
 - Read-only `terminal:quit-summary {}` returns App-ending/background-running counts; a broker count of `null` is unknown, not zero. Newer apps also return `peerOwnedCount`, `sessions[]` (at most 100 broker-held terminals: `sessionId`, `name?`, `workspaceId`, `workspaceName?`, `peer?.peerDeviceName?` for terminals other desktops created; no terminal content) and `omittedSessionCount`; treat them as optional. `terminal:stop-persistent-broker` belongs to the desktop quit dialog only and returns `HUMAN_DECISION_REQUIRED` to CLI/HTTP/agent callers; do not call it. Broker mutations are never automatically retried. `name` is broker-held metadata; `paneId`/`stealFocus` use ordinary desktop placement, and `background:true` cannot be combined with placement.
 

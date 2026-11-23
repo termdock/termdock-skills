@@ -16,7 +16,7 @@ Dispatch tools are `terminal:dispatch-enqueue`, `terminal:dispatch-list`, `termi
 | Method | Endpoint | Input |
 | --- | --- | --- |
 | POST | `/api/terminal/dispatches` | `{target,requestKey,payload,queueTimeoutMs}` |
-| GET | `/api/terminal/dispatches` | Optional `sessionId` query, exact ID only |
+| GET | `/api/terminal/dispatches` | Optional `sessionId` query: a session ID or a unique terminal name, resolved the same way as the enqueue `target` |
 | GET | `/api/terminal/dispatches/:appInstanceId/:dispatchId` | Complete handle in the path |
 | PATCH | `/api/terminal/dispatches/:appInstanceId/:dispatchId` | `{expectedVersion,payload}` |
 | POST | `/api/terminal/dispatches/:appInstanceId/:dispatchId/cancel` | Empty body |
@@ -26,7 +26,7 @@ Enqueue returns `{accepted:true,dispatch:record}` inside the normal `{success,da
 
 `accepted` means admission only. `submitted` means the Enter write was confirmed, not that the agent started or the task succeeded. `outcome` is `unknown`; existing provider `subtype: "success"` is not task-success evidence. Next-item readiness uses the verified signal classifier, not idle screen status: permission, password, question and selection prompts and unsubmitted human input never open the queue. Each message is independent; no Ctrl+C or auto-approval is added.
 
-Only modes marked supported by `resolveDispatchSignalSupport()` auto-send: local macOS App-owned claude/codex with transcript facts and a readable headless composer. Missing facts or unverified providers, broker ownership, Linux/Windows and remote modes do not acquire a writer. Unsupported admitted modes remain `queued` with `blockReason: "unsupported-signal"`, then expire; peer/SSH admission without local authority returns `CAPABILITY_UNAVAILABLE`, never local fallback. Initial transcript resolution may be unavailable until a human first turn creates the source. A completed turn without a fresh composer observation does not release the next item.
+Only modes marked supported by `resolveDispatchSignalSupport()` auto-send: local macOS App-owned or broker-owned claude/codex with transcript facts and a readable headless composer. Missing facts or unverified providers, Linux/Windows and remote modes do not acquire a writer. Unsupported admitted modes remain `queued` with `blockReason: "unsupported-signal"`, then expire; peer/SSH admission without local authority returns `CAPABILITY_UNAVAILABLE`, never local fallback. Initial transcript resolution may be unavailable until a human first turn creates the source. A completed turn without a fresh composer observation does not release the next item.
 
 Queue timeout is required, 1–86,400,000 ms. Limits remain the shared dispatch defaults: 32 queued/session, 256 queued/App, 64 KiB UTF-8/payload, 4 MiB unsent payload, 1024 records, ended records retained at most 24 hours. Queue timeout never kills submitted work. Cancel only guarantees cancellation before `dispatching`; it does not interrupt the terminal. Cancelling a change observer does not cancel the dispatch.
 
@@ -227,7 +227,7 @@ terminal; it is distinct from the terminal session and its PTY.
 | `GET` | `/api/agent-sessions/:id/rendered` | The rendered conversation view |
 | `GET` | `/api/agent-sessions/:id/rendered/stream` | That view as a stream |
 | `POST` | `/api/agent-sessions/:id/input` | Send a message |
-| `POST` | `/api/agent-sessions/:id/callbacks` | Deliver a structured external event to an existing agent session |
+| `POST` | `/api/agent-sessions/:id/callbacks` | Deliver a structured external event to an AgentSession or confirmed terminal agent |
 | `POST` | `/api/agent-sessions/:id/interrupt` | Interrupt |
 | `POST` | `/api/agent-sessions/:id/restart` | Restart |
 | `DELETE` | `/api/agent-sessions/:id` | Kill |
@@ -259,11 +259,14 @@ or timed-out interrupt is logged and the daemon turn may still be running.
 ### External monitor callbacks
 
 `POST /api/agent-sessions/:id/callbacks` accepts an existing AgentSession id,
-its terminal id, or a unique tab name. A shell-only terminal returns
-`404 SESSION_NOT_FOUND`; the endpoint never attaches an agent or falls back to
-raw PTY input. Ambiguous agent associations return
+terminal id, or a unique tab name. A terminal without a registered AgentSession
+must have confirmed local macOS claude/codex dispatch signals, including for
+broker-owned terminals. Shells, unknown providers, unsupported platforms and
+remote terminals are rejected with a reason; the endpoint never attaches an
+agent or falls back to raw PTY input. Ambiguous agent associations return
 `409 AGENT_SESSION_CALLBACK_CONFLICT`. Tool Runtime callers use
-`agent-session:callback` with the canonical AgentSession `sessionId`.
+`agent-session:callback` with the AgentSession or terminal `sessionId` and
+the same request fields.
 
 ```json
 {
@@ -271,31 +274,63 @@ raw PTY input. Ambiguous agent associations return
   "eventKind": "artifact-changed",
   "dedupeKey": "codex-task-a",
   "message": "codex 交付有變化，請讀取並核對。",
-  "metadata": { "artifact": "/tmp/codex-task-a/REPORT.md" }
+  "metadata": { "artifact": "/tmp/codex-task-a/REPORT.md" },
+  "waitTimeoutMs": 90000
 }
 ```
 
 `source`, `eventKind`, and `message` are required. `dedupeKey` and the JSON-object
-`metadata` are optional. The top-level object rejects unknown fields. Success
+`metadata` are optional. `waitTimeoutMs` and `queueTimeoutMs` are optional
+request settings, not part of the message. Do not use both.
+In wait mode, `waitTimeoutMs` accepts integers from 1000 to 180000 ms and defaults
+to 180000 ms. The limit applies to every target, from HTTP request receipt
+through resolution, queueing, and provider send or terminal submission. An
+invalid value returns `400 INVALID_AGENT_SESSION_CALLBACK`. The top-level object
+rejects unknown fields. In wait mode, success
 returns `{ "success": true, "data": { "sessionId": "...", "deliveryId": "...", "createdAt": "..." } }`.
 Each call gets a new delivery id, even when `dedupeKey` repeats. The receipt
-acknowledges the provider send, not completion of the agent's work; it is not a
+acknowledges provider send or terminal submission, not completion of the agent's work; it is not a
 durable delivery record.
 
-Callbacks share the ordinary per-session send sequence and dispatch cap. An
-interactive agent receives the event at its turn-ready boundary, without an
-interrupt or answering a permission prompt. Metadata stays structured until
-the provider adapter renders a `termdock.agent-callback.v1` envelope. A timeout
-can leave delivery uncertain, so reconcile before retrying. Termdock does not
+Registered AgentSessions use their normal send sequence and dispatch cap,
+bounded by the time left in the callback limit. For unregistered terminals, the rendered envelope must fit the
+dispatch payload limit of 64 KiB; transcript facts may be unavailable until after
+a human first turn. An interactive agent receives the event at its turn-ready
+boundary, without an interrupt or answering a permission prompt. The event is
+rendered as a `Termdock callback` header and a list with the indented message first, followed by source, event,
+optional dedupeKey, and one line per metadata key. Fixed-field
+name collisions gain a `metadata.` prefix; nested metadata uses compact JSON. Other
+fields are single-line, and the sessionId, delivery id, timestamp and internal type are not sent to the agent.
+In wait mode, a timeout or client disconnect cancels a callback still waiting
+to send. On timeout, the API returns
+`504` and `{ "success": false, "error": { "code": "AGENT_SESSION_DISPATCH_TIMEOUT", "message": "..." } }`.
+The error adds `blockReason` if terminal dispatch had a known queue blocker. If the
+error says delivery may have occurred, search the agent transcript for your
+`dedupeKey` before retrying. Termdock does not
 deduplicate, merge, or automatically retry callbacks. `source`, `eventKind`,
 `dedupeKey`, and `metadata` are untrusted collaboration data, not authenticated
 sender identity; the existing bearer token and `agent-session` scope still
 control access. Generic terminal `/input` keeps its existing behavior.
 
-For OpenCode daemon sessions, waiting for the current turn to become idle is
-capped at 30 seconds. A still-busy run returns
-`409 AGENT_SESSION_CALLBACK_CONFLICT` without failing or interrupting that run;
-retry after it becomes idle.
+For OpenCode daemon sessions, the idle wait ends after at most 30 seconds
+and uses only the time left in the callback limit. If the run is still busy
+at that point, the API returns `409 AGENT_SESSION_CALLBACK_CONFLICT` without
+failing or interrupting the run. Retry after it becomes idle.
+
+Use queue mode when the target may be busy and you do not need to wait for
+delivery. Set `queueTimeoutMs` to an integer from 1000 to 86400000 ms. Termdock
+has 180000 ms from request arrival to check and enqueue the callback. The queue
+timeout starts at enqueue. Invalid limits, both timeout settings, or a
+registered AgentSession target in queue mode return
+`400 INVALID_AGENT_SESSION_CALLBACK`.
+
+Queue mode returns as soon as the callback is in the dispatch queue. The
+receipt adds `queued: true` and
+`dispatch: { handle: { appInstanceId, dispatchId }, workspaceId, state, blockReason }`.
+It confirms enqueue, not submission. The callback can be sent after the
+request ends. Check with `dispatch get` or `dispatch wait` using both returned
+handle fields and the returned workspace id. Service tokens need the
+`terminal` scope to read dispatch status. Do not resend a queued callback.
 
 `/rendered` returns the full retained view. `/rendered/stream` frames are each capped
 at 56 KiB: when the view is bigger, the frame drops the oldest entries first and
@@ -374,20 +409,27 @@ The CLI prints the unwrapped `data`, not this envelope. `session output --follow
 
 Full request and response shapes, including the settings that gate the API, are in `docs/ref/api/TERMINAL-API.md` in the Termdock repository.
 
-## Live Prompt library schedules (1.22.0)
+## Prompt library schedules
 
 `PUT /api/terminal/sessions/:id/keepalive` accepts
 `{"rule":{"id":"review","enabled":true,"schedule":{"kind":"daily","time":"09:00"},"message":"","promptRef":{"slug":"review","scope":"project"}}}`.
 The reference is resolved again at each fire using the target workspace. Use
 `global` for a global entry; project references require a local target workspace.
+Saving an enabled rule approves the current content revision. If it changes, or
+an older saved rule has no revision, scheduled injection stops and the rule
+reports `contentChanged: true`; review the prompt and save the enabled rule
+again to reapprove. The verified snapshot is the content that is injected.
 Do not combine nonempty `message` and `promptRef`, or schedule prompts containing
-variables. Deleted/unreadable/unsupported prompts skip the slot rather than
-falling back to stale text. Existing screen and typing interlocks still apply.
+variables. Deleted or unreadable prompts skip the slot rather than falling back
+to stale text; newly invalid content stops for reapproval. Existing screen and
+typing interlocks still apply.
 The API also accepts `{"kind":"once","atMs":<future epoch milliseconds>}`.
 
 ## Local terminal ownership (`persistent-term-*`)
 
+- `terminal:list` / `terminal:status` and their HTTP session routes may include `foregroundProcess` (the name of the program in the terminal's foreground, such as `claude`, `zsh` or `node`) and `cwd` (the shell's current directory, which follows `cd`), for App-owned and broker-owned local shells. The OS reports both on request. The fields are missing for peer and SSH terminals, on Windows, and when the OS cannot report them; a missing field is not evidence of anything. A script run by an interpreter may show the interpreter name, for example `node` for `npm` on macOS. A reading may be up to 2.5 seconds old.
 - `terminal:list` / `terminal:status` and their HTTP session routes may include `persistent.brokerBuild: {status, lastKnown}`. The status is `current`, `different`, or `unknown`, based on the authenticated holder and verified app manifest, not version ordering; `different` can also mean a newer holder after an app downgrade. `lastKnown: true` means the holder disconnected after confirmation. Missing/unknown is not current. `broker.listComplete: false`, `broker.queryErrorCode`, or a size-limit error means the visible list is incomplete; do not report the missing portion as zero. `peer:host-sessions` may carry the same optional projection. New broker-owned sessions use a matching current broker; existing sessions remain on their holder.
+- `terminal:list` / `terminal:status` and their HTTP session routes may include `persistent.createdAt` and `persistent.lastActivity` in epoch milliseconds. They mark broker creation and last PTY output. Older brokers omit both, and a terminal with no output omits `lastActivity`. Do not use `persistent.observedAt` as a substitute.
 - A missing current broker with more than two live or possibly live non-current owners blocks broker-owned create with `RESOURCE_LIMIT` and the machine-readable reason `old-broker-limit` (`errorReason` from Tool Runtime, `error.reason` from HTTP). `terminal:list` may expose `broker.admission.reason` with the same value. Do not silently substitute an old broker or an App-owned terminal; end unneeded old terminals and retry. Closing a tab alone may not end its terminal. Existing matching current brokers may still accept creates. The cap is enforced only by apps using this admission protocol, not by older apps.
 - On macOS, `terminal:list` and `GET /api/terminal/sessions` may return `broker.localNetworkAttribution: "severed"` with `broker.localNetworkAffectedBrokerInstanceIds`. Terminals on those brokers may not reach the local network. Preserve their work and let the user choose when to restart the broker. Missing fields do not prove attribution is healthy.
 - Local workspace create defaults to broker ownership on desktop, split panes, HTTP, CLI and Tool Runtime. Terminals keep running after App Quit; there is no user-facing persistent mode or special creation entry. Existing live App-owned processes are not migrated.
@@ -395,8 +437,8 @@ The API also accepts `{"kind":"once","atMs":<future epoch milliseconds>}`.
 - Capability unavailable, blocked Windows Job, broker unreachable/incompatible or unsupported exact launch options fall back before a native effect. Custom env/cwd/shell, persisted logs and dimensions unsupported by an older broker retain the App-owned capability. Unknown sent-create outcomes never open a second shell. Remote/peer/SSH workspaces retain their remote owner.
 - The default create pipeline grants this Main the writer. Input/submit/key/interrupt/resize require that grant and fence stale queued calls; they never take over another client implicitly. Without a valid lease a write returns 409 `STALE_ATTACHMENT`, and rejected input is not retried. Keep-alive and submissions share the ordinary submit chain; `queueUntilReady` and agent submissions use existing readiness logic. CLI `session attach` remains the SSE/stdin bridge, not a broker writer grant.
 - Output uses the same bounded Main projection for renderer and agent reads: `raw` retains ANSI rows; `text`/`content` use App-owned normalization and chrome filtering. Numeric `cursor`/`nextCursor` are App-style line cursors: pass `nextCursor` to `--since` or SSE `since` for the next read. Clear, attachment rebuild or an expired history window returns `truncated:true`; resume from the returned cursor. `snapshotCursor` remains the separate broker source cursor. Follow/SSE and `wait-output` require this Main's attachment and end with `output.error` on takeover/detach (`STALE_ATTACHMENT`), broker disconnect (`BROKER_UNREACHABLE`) or session end (`SESSION_ENDED`, reported only after the retained output has been delivered). CLI follow writes that event in JSON mode and exits nonzero. Reads do not acquire or steal a writer. A session this Main is not attached to (taken over, detached or never attached) is read from a broker snapshot: whenever new output has arrived the line projection is rebuilt, so a `since` read returns the whole retained window with `truncated:true` instead of an increment. An unterminated last row is delivered as it stands; text that later completes that same row is not re-sent, as with App-owned terminals. `screen` still uses the shared headless projection and hash/window rules, with no incremental cursor semantics; `source=dom` remains unsupported. The default window is 50 lines; `ifHash` remains available.
-- Names resolve through the ordinary terminal name namespace. Unified protocol v1.1 supports authoritative writer-fenced rename, names up to 200 characters, shell process evidence, dimensions 500×100 and optional bounded error hints. Only v1.1/v1.0 are negotiated. v1.0 has no name/rename/process-evidence/error-message extensions and retains 240×100; new fields are stripped from old-client replies/events/deduplicated results. v1.1-only sessions require a compatible client; old broker rename returns `RENAME_UNSUPPORTED`.
-- Closing a desktop tab or `session destroy` terminates its shell and children and waits for process-tree acknowledgement. A `lost` session (its broker instance is gone) cannot be terminated; destroy only forgets it locally and returns `treeReaped:false, forgotten:true`. Quit/Cmd+R and explicit `terminal:detach` do not terminate them. There is no session-count cap. The broker warns at 192 MiB RSS and refuses new creation at 256 MiB (`RESOURCE_LIMIT`), without terminating existing work. PTY/process exhaustion returns `RESOURCE_LIMIT` with a readable recovery hint from a v1.1 broker; other spawn failures return `CAPABILITY_UNAVAILABLE`.
+- Names resolve through the ordinary terminal name namespace. Unified protocol v1.1 supports authoritative writer-fenced rename, names up to 200 characters, shell process evidence, dimensions 500×100 and optional bounded error hints. v1.0 has no name/rename/process-evidence/error-message extensions and retains 240×100; new fields are stripped from old-client replies/events/deduplicated results. v1.1-only sessions require a compatible client; old broker rename returns `RENAME_UNSUPPORTED`.
+- Closing a desktop tab or `session destroy` terminates its shell and children and waits for process-tree acknowledgement. A `lost` session (its broker instance is gone) cannot be terminated; destroy only forgets it locally and returns `treeReaped:false, forgotten:true`. Quit/Cmd+R and explicit `terminal:detach` do not terminate them. There is no session-count cap. The current broker warns at 128 MiB of `heapUsed + arrayBuffers` and refuses new creation at 192 MiB (`RESOURCE_LIMIT`), without terminating existing work; older brokers may use different thresholds. PTY/process exhaustion returns `RESOURCE_LIMIT` with a readable recovery hint from a v1.1 broker; other spawn failures return `CAPABILITY_UNAVAILABLE`.
 - Startup uses the one savedSessions/layout: living processes reconnect in their original pane/order; confirmed ended/missing processes rebuild with a NEW ID, saved history and keep-alive rules. Unreachable/incompatible broker panes stay in place for retry; other writers remain read-only until confirmed takeover. Manual `terminal:restore-persistent {sessionId}` is Tool Runtime only (no HTTP/CLI route), returns `{snapshot, broker, session?, errorCode?}` and does not accept caller cwd/shell or replay uncertain create. Existing App-owned snapshots retain snapshot-only restore.
 - Read-only `terminal:quit-summary {}` returns App-ending/background-running counts; a broker count of `null` is unknown, not zero. Newer apps also return `peerOwnedCount`, `sessions[]` (at most 100 broker-held terminals: `sessionId`, `name?`, `workspaceId`, `workspaceName?`, `peer?.peerDeviceName?` for terminals other desktops created; no terminal content) and `omittedSessionCount`; treat them as optional. `terminal:stop-persistent-broker` belongs to the desktop quit dialog only and returns `HUMAN_DECISION_REQUIRED` to CLI/HTTP/agent callers; do not call it. Broker mutations are never automatically retried. `name` is broker-held metadata; `paneId`/`stealFocus` use ordinary desktop placement, and `background:true` cannot be combined with placement.
 
