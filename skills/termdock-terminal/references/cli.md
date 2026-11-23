@@ -195,6 +195,70 @@ CLI exits. Check its status with `dispatch get` or `dispatch wait`. Pass
 handle arguments and `dispatch.workspaceId` as `--workspace`.
 Do not resend a queued callback.
 
+## Handing a task to another agent
+
+Run a full `claude` or `codex` in its own background session, give it one task,
+and have it call you back when it is done.
+
+1. **Open a session.** `session create` has no working-directory option, so
+   `cd` in the same line that starts the agent.
+
+   ```bash
+   id=$(termdock session create --workspace <wsId> --name task-a --background --json | jq -r .session.id)
+   ```
+
+2. **Start the agent.** It runs without a human, so give it the permissions the
+   task needs up front, or it stops at the first approval prompt that nobody
+   answers.
+
+   | Agent | Command | Notes |
+   |---|---|---|
+   | claude | `cd /repo && claude --permission-mode acceptEdits --allowedTools 'Bash(termdock agent callback:*)'` | Edits are approved; only the listed Bash commands run without a prompt. Add the commands the task needs, for example `'Bash(npm test:*)'`. |
+   | claude | `cd /repo && claude --dangerously-skip-permissions` | Approves everything. Use only when the environment is already sandboxed. |
+   | codex | `codex -C /repo -s workspace-write -a never` | Writes inside the repo. A command the sandbox blocks fails back to the agent instead of waiting for an approval nobody gives. |
+   | codex | `codex -C /repo --dangerously-bypass-approvals-and-sandbox` | No sandbox and no prompts. Use only when the environment is already sandboxed. |
+
+   Add `--model <name>` to pick the model.
+
+   ```bash
+   termdock session input "$id" "cd /repo && claude --permission-mode acceptEdits --allowedTools 'Bash(termdock agent callback:*)'" --enter --json
+   ```
+
+3. **Send the task when the agent is ready.** `--queue-until-ready` holds the
+   text until the session's readiness is `idle`, so nothing is typed into the
+   shell before the agent's prompt appears. If the agent is not ready before
+   `--ready-timeout`, the command fails with `TERMINAL_NOT_READY` and writes
+   nothing; read the screen (`session output "$id" --mode screen --json`) to see
+   why, for example a login or trust prompt.
+
+   ```bash
+   termdock session submit "$id" "Read /repo/.tmp/task-a.md and carry it out." --queue-until-ready --ready-timeout 60000 --json
+   ```
+
+   Put the task itself in a file and send one line that points to it. A long
+   multi-line paste can be split or altered by the TUI, and a file has no size
+   limit and keeps the exact text.
+
+4. **Ask for a callback.** End the task file with the command the agent runs
+   when it is done. Use your own `$TERMDOCK_SESSION_ID` as the target and queue
+   mode, so the agent does not wait for your turn to end:
+
+   ```bash
+   termdock agent callback <dispatcher-session-id> --source task-a \
+     --event-kind task-finished --dedupe-key task-a-done \
+     --message "<one-line result or where the result is>" --queue-timeout 600000 --json
+   ```
+
+   The callback arrives after your current turn ends. It reaches only a
+   dispatcher that is a local macOS claude or codex terminal (see "External
+   monitor callbacks to an agent"). If you are not one, wait on the task's own
+   output instead: `session wait "$id" --text '<done marker>' --timeout <ms> --json`,
+   not a `session output` loop.
+
+5. **Close the session** once you have read the result:
+   `termdock session destroy "$id" --json`. Closing ends the agent and anything
+   it started.
+
 ## Layout
 
 ```bash
