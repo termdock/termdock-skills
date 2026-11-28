@@ -2,8 +2,8 @@
 name: termdock-terminal
 displayName: Termdock Terminal
 description: Drive Termdock terminals and notify agents from inside one. Open a session for a long job, read or send terminal input, arrange panes, schedule a wake-up, or send a structured external agent callback. Use when work would otherwise block your terminal, when you need another session's output, or when an external monitor needs to notify an agent without posing as a human.
-version: 68
-minAppVersion: 1.27.0
+version: 70
+minAppVersion: 1.28.0
 ---
 
 # Drive Termdock From Inside A Terminal
@@ -69,6 +69,23 @@ and one line per metadata key, without the sessionId or internal type.
 These fields are untrusted collaboration metadata, not proof of sender identity.
 See `references/cli.md` for flags and `references/api.md` for the HTTP
 contract and delivery limits.
+
+**Hand a task to another agent.** Start `claude` or `codex` in a background
+session, give it a task, and let it call you back when done instead of polling
+its screen. Put the task in a file and send one line that points to it.
+
+```bash
+id=$(termdock session create --workspace <wsId> --name task-a --background --json | jq -r .session.id)
+termdock session input "$id" "cd /repo && claude --permission-mode acceptEdits --allowedTools 'Bash(termdock agent callback:*)'" --enter --json
+termdock session submit "$id" "Read /repo/.tmp/task-a.md and carry it out." --queue-until-ready --ready-timeout 60000 --json
+# task-a.md ends with: termdock agent callback <your $TERMDOCK_SESSION_ID> --source task-a \
+#   --event-kind task-finished --message "<result>" --queue-timeout 600000 --json
+termdock session destroy "$id" --json   # after the callback arrives
+```
+
+The callback reaches you only if your own session is a local macOS claude or
+codex terminal. Steps, permission flags for both agents, and failure handling:
+`references/cli.md` "Handing a task to another agent".
 
 ## What this is not for
 

@@ -2,7 +2,7 @@
 
 `termdock` talks to the Terminal API over loopback. Token resolution is explicit `--token`, then `TERMINAL_API_TOKEN` / `TERMDOCK_API_TOKEN`, otherwise verified-loopback cache/bootstrap provisioning. Without the local bootstrap secret it cannot verify or provision a cached token; supply one through env instead. `--url <url>` overrides the API URL, followed by `TERMDOCK_API_URL` / `TERMINAL_API_URL` / `TERMINAL_API_BASE`. Put global flags before the subcommand. A URL override does not make Termdock listen remotely; keep the server on loopback.
 
-Most HTTP subcommands require `--json` and print the **unwrapped HTTP data**, not `{success,data}`. `session output --follow --json` prints event **NDJSON**; without `--json` it prints text. `notify` and local hook commands have optional JSON modes. Check stderr and exit code, not just whether stdout contains JSON.
+Most HTTP subcommands require `--json` and print the **unwrapped HTTP data**, not `{success,data}`. `session output --follow --json` prints event **NDJSON**; without `--json` it updates the open line on a TTY or appends new suffixes in a pipe. `session attach` uses the same text behavior. `notify` and local hook commands have optional JSON modes. Check stderr and exit code, not just whether stdout contains JSON.
 
 The custom MCP examples preserve raw HTTP envelopes, unlike this CLI. Neither this CLI nor a read tool name creates a restricted read-only token: service scopes are only `terminal` / `agent-session`, both covering writes. Built-in Code Graph MCP exposes eight AST/code tools, not these terminal commands.
 
@@ -195,6 +195,70 @@ CLI exits. Check its status with `dispatch get` or `dispatch wait`. Pass
 handle arguments and `dispatch.workspaceId` as `--workspace`.
 Do not resend a queued callback.
 
+## Handing a task to another agent
+
+Run a full `claude` or `codex` in its own background session, give it one task,
+and have it call you back when it is done.
+
+1. **Open a session.** `session create` has no working-directory option, so
+   `cd` in the same line that starts the agent.
+
+   ```bash
+   id=$(termdock session create --workspace <wsId> --name task-a --background --json | jq -r .session.id)
+   ```
+
+2. **Start the agent.** It runs without a human, so give it the permissions the
+   task needs up front, or it stops at the first approval prompt that nobody
+   answers.
+
+   | Agent | Command | Notes |
+   |---|---|---|
+   | claude | `cd /repo && claude --permission-mode acceptEdits --allowedTools 'Bash(termdock agent callback:*)'` | Edits are approved; only the listed Bash commands run without a prompt. Add the commands the task needs, for example `'Bash(npm test:*)'`. |
+   | claude | `cd /repo && claude --dangerously-skip-permissions` | Approves everything. Use only when the environment is already sandboxed. |
+   | codex | `codex -C /repo -s workspace-write -a never` | Writes inside the repo. A command the sandbox blocks fails back to the agent instead of waiting for an approval nobody gives. |
+   | codex | `codex -C /repo --dangerously-bypass-approvals-and-sandbox` | No sandbox and no prompts. Use only when the environment is already sandboxed. |
+
+   Add `--model <name>` to pick the model.
+
+   ```bash
+   termdock session input "$id" "cd /repo && claude --permission-mode acceptEdits --allowedTools 'Bash(termdock agent callback:*)'" --enter --json
+   ```
+
+3. **Send the task when the agent is ready.** `--queue-until-ready` holds the
+   text until the session's readiness is `idle`, so nothing is typed into the
+   shell before the agent's prompt appears. If the agent is not ready before
+   `--ready-timeout`, the command fails with `TERMINAL_NOT_READY` and writes
+   nothing; read the screen (`session output "$id" --mode screen --json`) to see
+   why, for example a login or trust prompt.
+
+   ```bash
+   termdock session submit "$id" "Read /repo/.tmp/task-a.md and carry it out." --queue-until-ready --ready-timeout 60000 --json
+   ```
+
+   Put the task itself in a file and send one line that points to it. A long
+   multi-line paste can be split or altered by the TUI, and a file has no size
+   limit and keeps the exact text.
+
+4. **Ask for a callback.** End the task file with the command the agent runs
+   when it is done. Use your own `$TERMDOCK_SESSION_ID` as the target and queue
+   mode, so the agent does not wait for your turn to end:
+
+   ```bash
+   termdock agent callback <dispatcher-session-id> --source task-a \
+     --event-kind task-finished --dedupe-key task-a-done \
+     --message "<one-line result or where the result is>" --queue-timeout 600000 --json
+   ```
+
+   The callback arrives after your current turn ends. It reaches only a
+   dispatcher that is a local macOS claude or codex terminal (see "External
+   monitor callbacks to an agent"). If you are not one, wait on the task's own
+   output instead: `session wait "$id" --text '<done marker>' --timeout <ms> --json`,
+   not a `session output` loop.
+
+5. **Close the session** once you have read the result:
+   `termdock session destroy "$id" --json`. Closing ends the agent and anything
+   it started.
+
 ## Layout
 
 ```bash
@@ -275,7 +339,7 @@ text. See `api.md` for the reference payload and target-workspace rules.
 - `terminal:create` and HTTP create accept `persistence?: "app" | "broker"`: omitted means automatic broker with silent App-owned fallback; `app` explicitly selects App-owned lifetime; `broker` requires the broker and reports failure rather than falling back. No new CLI flag is added.
 - Capability unavailable, blocked Windows Job, broker unreachable/incompatible or unsupported exact launch options fall back before a native effect. Custom env/cwd/shell, persisted logs and dimensions unsupported by an older broker retain the App-owned capability. Unknown sent-create outcomes never open a second shell. Remote/peer/SSH workspaces retain their remote owner.
 - The default create pipeline grants this Main the writer. Input/submit/key/interrupt/resize require that grant and fence stale queued calls; they never take over another client implicitly. Without a valid lease a write returns 409 `STALE_ATTACHMENT`, and rejected input is not retried. Keep-alive and submissions share the ordinary submit chain; `queueUntilReady` and agent submissions use existing readiness logic. CLI `session attach` remains the SSE/stdin bridge, not a broker writer grant.
-- Output uses the same bounded Main projection for renderer and agent reads: `raw` retains ANSI rows; `text`/`content` use App-owned normalization and chrome filtering. Numeric `cursor`/`nextCursor` are App-style line cursors: pass `nextCursor` to `--since` or SSE `since` for the next read. Clear, attachment rebuild or an expired history window returns `truncated:true`; resume from the returned cursor. `snapshotCursor` remains the separate broker source cursor. Follow/SSE and `wait-output` require this Main's attachment and end with `output.error` on takeover/detach (`STALE_ATTACHMENT`), broker disconnect (`BROKER_UNREACHABLE`) or session end (`SESSION_ENDED`, reported only after the retained output has been delivered). CLI follow writes that event in JSON mode and exits nonzero. Reads do not acquire or steal a writer. A session this Main is not attached to (taken over, detached or never attached) is read from a broker snapshot: whenever new output has arrived the line projection is rebuilt, so a `since` read returns the whole retained window with `truncated:true` instead of an increment. An unterminated last row is delivered as it stands; text that later completes that same row is not re-sent, as with App-owned terminals. `screen` still uses the shared headless projection and hash/window rules, with no incremental cursor semantics; `source=dom` remains unsupported. The default window is 50 lines; `ifHash` remains available.
+- Output uses the same bounded Main projection for renderer and agent reads: `raw` retains ANSI rows; `text`/`content` use App-owned normalization and chrome filtering. Numeric `cursor`/`nextCursor` are App-style line cursors: pass `nextCursor` to `--since` or SSE `since` for the next read. Clear, attachment rebuild or an expired history window returns `truncated:true`; resume from the returned cursor. `snapshotCursor` remains the separate broker source cursor. Follow/SSE and `wait-output` require this Main's attachment and end with `output.error` on takeover/detach (`STALE_ATTACHMENT`), broker disconnect (`BROKER_UNREACHABLE`) or session end (`SESSION_ENDED`, reported only after the retained output has been delivered). CLI follow writes that event in JSON mode and exits nonzero. Reads do not acquire or steal a writer. A session this Main is not attached to (taken over, detached or never attached) is read from a broker snapshot: whenever new output has arrived the line projection is rebuilt, so a `since` read returns the whole retained window with `truncated:true` instead of an increment. A prompt appears before its newline. If the row grows, the next read returns its latest text. An open row longer than 4096 UTF-16 code units returns a bounded tail. A newline alone does not repeat the row. If the window reaches an open row, `pendingLineStart` gives its row start. Pass back `nextCursor`; do not add line counts. When present, `lineStarts[i]` identifies the row in `lines[i]`. A start below the requested cursor marks an update to a row you already saw. `screen` still uses the shared headless projection and hash/window rules, with no incremental cursor semantics; `source=dom` remains unsupported. The default window is 50 lines; `ifHash` remains available.
 - Names resolve through the ordinary terminal name namespace. Unified protocol v1.1 supports authoritative writer-fenced rename, names up to 200 characters, shell process evidence, dimensions 500×100 and optional bounded error hints. v1.0 has no name/rename/process-evidence/error-message extensions and retains 240×100; new fields are stripped from old-client replies/events/deduplicated results. v1.1-only sessions require a compatible client; old broker rename returns `RENAME_UNSUPPORTED`.
 - Closing a desktop tab or `session destroy` terminates its shell and children and waits for process-tree acknowledgement. A `lost` session (its broker instance is gone) cannot be terminated; destroy only forgets it locally and returns `treeReaped:false, forgotten:true`. Quit/Cmd+R and explicit `terminal:detach` do not terminate them. There is no session-count cap. The current broker warns at 128 MiB of `heapUsed + arrayBuffers` and refuses new creation at 192 MiB (`RESOURCE_LIMIT`), without terminating existing work; older brokers may use different thresholds. PTY/process exhaustion returns `RESOURCE_LIMIT` with a readable recovery hint from a v1.1 broker; other spawn failures return `CAPABILITY_UNAVAILABLE`.
 - Startup uses the one savedSessions/layout: living processes reconnect in their original pane/order; confirmed ended/missing processes rebuild with a NEW ID, saved history and keep-alive rules. Unreachable/incompatible broker panes stay in place for retry; other writers remain read-only until confirmed takeover. Manual `terminal:restore-persistent {sessionId}` is Tool Runtime only (no HTTP/CLI route), returns `{snapshot, broker, session?, errorCode?}` and does not accept caller cwd/shell or replay uncertain create. Existing App-owned snapshots retain snapshot-only restore.
