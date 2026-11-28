@@ -2,8 +2,8 @@
 name: termdock-ast
 displayName: Termdock AST
 description: Queries AST index to find symbol locations, file dependencies, callers, and impact analysis. Use when user asks where is X, who calls X, what depends on X, or before refactoring. Skip when user provides exact file path.
-version: 8
-minAppVersion: 1.27.0
+version: 9
+minAppVersion: 1.29.0
 ---
 
 # Termdock AST API
@@ -47,6 +47,10 @@ The list is ordered by status and name, not by which project you are in, so pick
 | Impact analysis | `/api/impact` | "What breaks if I change this?" |
 
 ---
+
+## Code Graph MCP
+
+If your MCP client needs to start the built-in read-only server, see [references/cli.md](references/cli.md). This server reads a saved index and does not need the AST HTTP API.
 
 ## API Reference
 

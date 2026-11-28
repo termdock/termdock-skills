@@ -72,6 +72,10 @@ External local tmux requires prior desktop consent. `terminal:tmux-grant {socket
 
 ## Terminal sessions
 
+The host masks known secrets as [REDACTED] by default in output (including raw),
+SSE events, prompt text and log reads. The user controls masking in Settings →
+Terminal. Turning it off does not restore text already masked in a persisted log.
+
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/api/terminal/workspaces` | Workspaces, and their ids for creating sessions |
@@ -457,7 +461,7 @@ The API also accepts `{"kind":"once","atMs":<future epoch milliseconds>}`.
 }
 ```
 
-The tool takes the same fields plus `sessionId`. `workspaceId` and `authority` are optional expected identity checks, not permission grants. App authority is `app`; broker authority is `broker:<attachmentId>` (or `broker:detached` for a detached snapshot).
+The tool takes the same fields plus `sessionId`. `workspaceId` and `authority` are optional expected identity checks, not permission grants. App authority is `app`; broker authority is `broker:<attachmentId>` (or `broker:detached` for a detached snapshot). Peer authority is `peer:<attachmentId>`.
 
 - `text`: a case-sensitive literal substring in the current screen. Regex metacharacters are literal.
 - `gone`: that literal is absent from the current screen. Initial absence succeeds, even if scrollback/history contains it. It does not mean history was deleted.
@@ -465,7 +469,9 @@ The tool takes the same fields plus `sessionId`. `workspaceId` and `authority` a
 - `timeoutMs`: default 30000, maximum 120000; finite nonnegative numbers only, with no clamping. `0` checks once, including an initial screen read and bounded regex evaluation; it does not subscribe for future matches.
 - The complete current screen is joined with newlines, using headless first and valid renderer fallback. Matching never reads history or truncates the screen. Limits: 16 waiters per session, 128 globally, 1024 UTF-8 bytes per value and a 256 KiB complete screen window.
 - Regex compilation and execution run only in abortable workers, at most two execution units and 50 ms per evaluation. Startup and queue time count toward the request deadline. Worker failure never falls back to Main.
-- Peer/SSH backends without this screen lease capability return `CAPABILITY_UNAVAILABLE`, without local IO. Broker snapshots are readable without acquiring a writer; a nonmatching continuous wait requires this Main's live attachment, otherwise it returns `CAPABILITY_UNAVAILABLE`.
+- A connected peer terminal reads the host's current screen and waits for updates from the peer output channel. A partial screen fails with `SNAPSHOT_TOO_LARGE`. A disconnect fails with `SCREEN_READ_UNAVAILABLE`, and session exit fails with `SESSION_ENDED`; neither satisfies `gone`. The wait never falls back to cached or local output or resumes on a new attachment.
+- SSH does not provide a reliable current screen for this check and returns `CAPABILITY_UNAVAILABLE`. Use `termdock session output <id> --mode text --json` to inspect SSH output.
+- Broker snapshots are readable without acquiring a writer; a nonmatching continuous wait requires this Main's live attachment, otherwise it returns `CAPABILITY_UNAVAILABLE`.
 
 ```json
 {"success":true,"data":{"sessionId":"zsh-example","kind":"text","matched":true,"timedOut":false,"observation":{"source":"headless","generation":"app:1","snapshotVersion":1}}}

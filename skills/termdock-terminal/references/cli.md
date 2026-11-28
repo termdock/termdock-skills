@@ -101,10 +101,12 @@ registry write, so a reported name survives restart.
 | `--name` | Names the tab. Use it: a name is what makes the session addressable later |
 | `--mode text` | Scrollback as plain text. The default choice for "what happened" |
 | `--mode screen` | What is on the screen right now. The choice for "is it waiting at a prompt". Works without a visible pane (read from the headless screen) |
-| `--mode raw` | Keeps ANSI sequences |
+| `--mode raw` | Keeps ANSI sequences in unaffected output. Known secrets are still masked by default |
 | `--since <cursor>` | Only what arrived after that line cursor, from a previous read; supported for broker-owned `persistent-term-*` too. Check `truncated` after clear/rebuild |
 | `--follow` | Streams instead of returning once, including broker-owned `persistent-term-*` attached to this Main. Ends explicitly on detach/takeover/disconnect/exit |
 | `--enter` | Submits the line. Without it the text sits at the prompt unsent |
+
+Output, follow, and log reads can show [REDACTED]. Only the user should turn off masking in Settings → Terminal.
 
 `session attach` takes over the terminal you run it in. Leave it to a human.
 
@@ -355,8 +357,10 @@ termdock session wait shell --regex '^中文.*done$' --flags im --timeout 30000 
 
 Choose one condition flag. `text`/`gone` are case-sensitive literals, not regex; initial absence satisfies `gone`, regardless of old history. Regex uses implicit Unicode `u`, plus optional `i`/`m` once each. Empty values and other flags are rejected. This checks the complete current screen (headless first, renderer fallback), never history. A match is not task-completion evidence.
 
-`--timeout` defaults to 30000 ms, accepts finite nonnegative values up to 120000 without clamping, and `0` checks once. `--workspace` and `--authority` are optional expected identity checks, not authority grants. App authority is `app`; broker authority is `broker:<attachmentId>`. The name resolves once; exit, rebuild or attachment change cannot redirect an old wait to a replacement.
+`--timeout` defaults to 30000 ms, accepts finite nonnegative values up to 120000 without clamping, and `0` checks once. `--workspace` and `--authority` are optional expected identity checks, not authority grants. App authority is `app`; broker authority is `broker:<attachmentId>`; peer authority is `peer:<attachmentId>`. The name resolves once; exit, rebuild or attachment change cannot redirect an old wait to a replacement.
 
 The unwrapped result includes `sessionId`, `kind`, `matched`, `timedOut` and `observation` (`source`, `generation`, `snapshotVersion`, or null if no snapshot completed). Normal expiry returns `matched:false,timedOut:true`; cancellation/revocation/target change are errors. Limits are 16 waiters per session, 128 globally, 1024 UTF-8 value bytes and a 256 KiB full-screen matching window. Oversized/unavailable screens fail instead of producing a false `gone` match. Regex runs only in terminating workers (two units, 50 ms per evaluation, queue time included in the deadline).
 
-Peer/SSH without the screen lease capability returns `CAPABILITY_UNAVAILABLE`, without local fallback. Broker initial/one-shot snapshots do not acquire a writer; a nonmatching continuous wait requires this Main's attachment. Stable API error codes are printed on stderr, including `INVALID_REGEX`, `UNSUPPORTED_REGEX_FLAGS`, `REGEX_TIMEOUT`, `REGEX_WORKER_UNAVAILABLE`, `RESOURCE_LIMIT`, `SNAPSHOT_TOO_LARGE`, `SCREEN_READ_UNAVAILABLE`, `SCREEN_READ_FAILED`, `CANCELLED`, `AUTHORITY_REVOKED` and `TARGET_CHANGED`. HTTP 4xx exits 64; transport/5xx exits 69. See `api.md` for the complete request/error contract.
+A connected peer terminal checks the host's current screen. Disconnect or exit stops the wait with an error, not a `gone` match. A partial screen fails instead of falling back to cached or local output. SSH returns `CAPABILITY_UNAVAILABLE`; use `termdock session output <id> --mode text --json` to inspect its output.
+
+Broker initial/one-shot snapshots do not acquire a writer; a nonmatching continuous wait requires this Main's attachment. Stable API error codes are printed on stderr, including `INVALID_REGEX`, `UNSUPPORTED_REGEX_FLAGS`, `REGEX_TIMEOUT`, `REGEX_WORKER_UNAVAILABLE`, `RESOURCE_LIMIT`, `SNAPSHOT_TOO_LARGE`, `SCREEN_READ_UNAVAILABLE`, `SCREEN_READ_FAILED`, `CANCELLED`, `AUTHORITY_REVOKED` and `TARGET_CHANGED`. HTTP 4xx exits 64; transport/5xx exits 69. See `api.md` for the complete request/error contract.
