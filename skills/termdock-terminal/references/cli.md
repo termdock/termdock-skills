@@ -101,10 +101,12 @@ registry write, so a reported name survives restart.
 | `--name` | Names the tab. Use it: a name is what makes the session addressable later |
 | `--mode text` | Scrollback as plain text. The default choice for "what happened" |
 | `--mode screen` | What is on the screen right now. The choice for "is it waiting at a prompt". Works without a visible pane (read from the headless screen) |
-| `--mode raw` | Keeps ANSI sequences |
+| `--mode raw` | Keeps ANSI sequences in unaffected output. Known secrets are still masked by default |
 | `--since <cursor>` | Only what arrived after that line cursor, from a previous read; supported for broker-owned `persistent-term-*` too. Check `truncated` after clear/rebuild |
 | `--follow` | Streams instead of returning once, including broker-owned `persistent-term-*` attached to this Main. Ends explicitly on detach/takeover/disconnect/exit |
 | `--enter` | Submits the line. Without it the text sits at the prompt unsent |
+
+Output, follow, and log reads can show [REDACTED]. Only the user should turn off masking in Settings → Terminal.
 
 `session attach` takes over the terminal you run it in. Leave it to a human.
 

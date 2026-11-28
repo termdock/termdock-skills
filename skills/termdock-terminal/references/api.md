@@ -72,6 +72,10 @@ External local tmux requires prior desktop consent. `terminal:tmux-grant {socket
 
 ## Terminal sessions
 
+The host masks known secrets as [REDACTED] by default in output (including raw),
+SSE events, prompt text and log reads. The user controls masking in Settings →
+Terminal. Turning it off does not restore text already masked in a persisted log.
+
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/api/terminal/workspaces` | Workspaces, and their ids for creating sessions |
